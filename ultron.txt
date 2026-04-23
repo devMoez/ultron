@@ -1,0 +1,84 @@
+╔══════════════════════════════════════════════════════════════════╗
+║                  ULTRON — AI ASSISTANT REQUIREMENTS              ║
+║                     Feature Checklist & Status                   ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Last updated: 2026-04-23
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ CORE IDENTITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅  Rename codebase from opencode → ultron
+✅  Global `ultron` terminal command (bun link)
+✅  Custom "ultron" ASCII logo in TUI
+✅  ultron.txt requirements file on Desktop/project root
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ WINDOWS SYSTEM TOOLS (AI-callable)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅  open_app       — Open applications, files, folders, URLs
+✅  system_info    — CPU, RAM, disk, OS, network, processes, battery
+✅  search_system  — Find files/folders on disk with wildcards
+✅  system_power   — Shutdown, restart, sleep, hibernate, lock, logout
+✅  manage_software— Install/uninstall/search/list apps via winget
+✅  send_notification— Desktop toast notifications (Win/Mac/Linux)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ OFFLINE TUI SLASH COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅  /lock          — Lock screen instantly
+✅  /sleep         — Put computer to sleep instantly
+✅  /sysinfo       — Show OS info in toast notification
+✅  /shutdown      — Shutdown with confirmation dialog
+✅  /restart       — Restart with confirmation dialog
+✅  /open          — Open app/file/URL (guided via AI)
+✅  /search        — Search for files on disk (guided via AI)
+✅  /install       — Install software via winget (guided via AI)
+✅  /uninstall     — Uninstall software via winget (guided via AI)
+✅  /notify        — Send desktop notification (guided via AI)
+✅  /help          — Show all Ultron capabilities (offline)
+✅  /commands      — List all slash commands with descriptions (offline)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ API KEYS & PROVIDERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅  .env file written to project root with all keys
+✅  Cloudflare Workers AI as primary model provider (llama-3.3-70b)
+⬜  /models offline command to switch between AI models
+✅  Tavily web search API keys configured (4 keys with rotation)
+✅  Tavily integrated into websearch tool (replacing Exa)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ WEB & RESEARCH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⬜  Tavily web search (deep research, current results)
+⬜  Open and read links in full
+⬜  File download tool (download from URLs to disk)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ NATURAL LANGUAGE COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅  Tools registered so AI can handle "open X", "search for Y" etc.
+⬜  System prompt tuning so AI proactively uses system tools
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ MOBILE / REMOTE ACCESS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⬜  Telegram bot integration (remote control via phone)
+⬜  Web interface for remote browser access
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ AGENTIC SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⬜  Specialized sub-agents (research, code, system, browser agents)
+⬜  Agent orchestration / routing
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SELF-EVOLUTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⬜  /evolve command — AI proposes and applies improvements to itself
+⬜  /uncensored mode — unrestricted self-improvement & hacking mode
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Progress: 17 / 28 complete
