@@ -55,6 +55,8 @@ import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
+import { execSync, exec as execCb } from "child_process"
+import os from "os"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
@@ -735,6 +737,211 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         const current = kv.get("diff_wrap_mode", "word")
         kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
         dialog.clear()
+      },
+    },
+
+    // ─── Jarvis System Commands ──────────────────────────────────────────────
+    {
+      title: "Open app / file / URL",
+      value: "jarvis.open",
+      category: "Jarvis",
+      slash: { name: "open", aliases: ["launch"] },
+      suggested: true,
+      onSelect: (dialog) => {
+        dialog.clear()
+        toast.show({
+          variant: "info",
+          message: "Tell me what to open — e.g. \"open notepad\", \"open https://github.com\", \"open C:\\Documents\"",
+          duration: 4000,
+        })
+      },
+    },
+    {
+      title: "Lock screen  (instant)",
+      value: "jarvis.lock",
+      category: "Jarvis",
+      slash: { name: "lock" },
+      suggested: true,
+      onSelect: (dialog) => {
+        dialog.clear()
+        try {
+          if (os.platform() === "win32") execSync("rundll32.exe user32.dll,LockWorkStation")
+          else if (os.platform() === "darwin") execSync("/System/Library/CoreServices/Menu\\ Extras/User.menu/Contents/Resources/CGSession -suspend")
+          else execSync("loginctl lock-session")
+        } catch { /* ignore */ }
+      },
+    },
+    {
+      title: "Sleep  (instant)",
+      value: "jarvis.sleep",
+      category: "Jarvis",
+      slash: { name: "sleep" },
+      onSelect: (dialog) => {
+        dialog.clear()
+        try {
+          if (os.platform() === "win32") execSync("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+          else if (os.platform() === "darwin") execSync("pmset sleepnow")
+          else execSync("systemctl suspend")
+        } catch { /* ignore */ }
+      },
+    },
+    {
+      title: "System info  (instant)",
+      value: "jarvis.sysinfo",
+      category: "Jarvis",
+      slash: { name: "sysinfo", aliases: ["info", "specs"] },
+      suggested: true,
+      onSelect: (dialog) => {
+        dialog.clear()
+        const totalGB = (os.totalmem() / 1024 / 1024 / 1024).toFixed(1)
+        const freeGB = (os.freemem() / 1024 / 1024 / 1024).toFixed(1)
+        const cpus = os.cpus()
+        const upH = Math.floor(os.uptime() / 3600)
+        const upM = Math.floor((os.uptime() % 3600) / 60)
+        const msg = [
+          `OS: ${os.type()} ${os.release()} (${os.arch()})`,
+          `Host: ${os.hostname()}  |  User: ${os.userInfo().username}`,
+          `CPU: ${cpus[0]?.model?.trim() ?? "Unknown"} (${cpus.length} cores)`,
+          `RAM: ${totalGB} GB total  |  ${freeGB} GB free`,
+          `Uptime: ${upH}h ${upM}m`,
+        ].join("\n")
+        toast.show({ variant: "info", message: msg, duration: 8000 })
+      },
+    },
+    {
+      title: "Search files on system",
+      value: "jarvis.search",
+      category: "Jarvis",
+      slash: { name: "search", aliases: ["find"] },
+      suggested: true,
+      onSelect: (dialog) => {
+        dialog.clear()
+        toast.show({
+          variant: "info",
+          message: "Tell me what to search — e.g. \"search for resume.pdf\" or \"find all mp4 files in Downloads\"",
+          duration: 4000,
+        })
+      },
+    },
+    {
+      title: "Install software (winget)",
+      value: "jarvis.install",
+      category: "Jarvis",
+      slash: { name: "install" },
+      onSelect: (dialog) => {
+        dialog.clear()
+        toast.show({
+          variant: "info",
+          message: "Tell me what to install — e.g. \"install VLC\" or \"install Git\"",
+          duration: 4000,
+        })
+      },
+    },
+    {
+      title: "Uninstall software (winget)",
+      value: "jarvis.uninstall",
+      category: "Jarvis",
+      slash: { name: "uninstall", aliases: ["remove"] },
+      onSelect: (dialog) => {
+        dialog.clear()
+        toast.show({
+          variant: "info",
+          message: "Tell me what to uninstall — e.g. \"uninstall VLC\"",
+          duration: 4000,
+        })
+      },
+    },
+    {
+      title: "Send desktop notification",
+      value: "jarvis.notify",
+      category: "Jarvis",
+      slash: { name: "notify", aliases: ["notification"] },
+      onSelect: (dialog) => {
+        dialog.clear()
+        execCb(
+          os.platform() === "win32"
+            ? `powershell -NoProfile -WindowStyle Hidden -Command "Add-Type -AssemblyName System.Windows.Forms; $n=New-Object System.Windows.Forms.NotifyIcon; $n.Icon=[System.Drawing.SystemIcons]::Information; $n.BalloonTipTitle='Ultron'; $n.BalloonTipText='Ready'; $n.Visible=$true; $n.ShowBalloonTip(3000); Start-Sleep 4; $n.Dispose()"`
+            : "echo 'notify'",
+          () => {},
+        )
+      },
+    },
+    {
+      title: "Shutdown computer",
+      value: "jarvis.shutdown",
+      category: "Jarvis",
+      slash: { name: "shutdown" },
+      onSelect: (dialog) => {
+        dialog.replace(() => (
+          <DialogConfirm
+            title="Shutdown"
+            description="Are you sure you want to shut down the computer?"
+            onConfirm={() => {
+              dialog.clear()
+              try {
+                if (os.platform() === "win32") execSync("shutdown /s /t 10")
+                else if (os.platform() === "darwin") execSync("sudo shutdown -h now")
+                else execSync("systemctl poweroff")
+              } catch { /* ignore */ }
+            }}
+            onCancel={() => dialog.clear()}
+          />
+        ))
+      },
+    },
+    {
+      title: "Restart computer",
+      value: "jarvis.restart",
+      category: "Jarvis",
+      slash: { name: "restart", aliases: ["reboot"] },
+      onSelect: (dialog) => {
+        dialog.replace(() => (
+          <DialogConfirm
+            title="Restart"
+            description="Are you sure you want to restart the computer?"
+            onConfirm={() => {
+              dialog.clear()
+              try {
+                if (os.platform() === "win32") execSync("shutdown /r /t 10")
+                else if (os.platform() === "darwin") execSync("sudo shutdown -r now")
+                else execSync("systemctl reboot")
+              } catch { /* ignore */ }
+            }}
+            onCancel={() => dialog.clear()}
+          />
+        ))
+      },
+    },
+    {
+      title: "Help — Ultron capabilities overview",
+      value: "jarvis.help",
+      category: "Jarvis",
+      slash: { name: "help", aliases: ["?"] },
+      onSelect: (dialog) => {
+        dialog.clear()
+        toast.show({
+          title: "Ultron — Capabilities",
+          message:
+            "System: open, search, sysinfo, lock, sleep, shutdown, restart, notify, install, uninstall | Web: search the internet, read links, download files | AI: code, edit, write, bash | Type naturally or use /commands for slash list",
+          duration: 10000,
+          variant: "info",
+        })
+      },
+    },
+    {
+      title: "Commands — List all slash commands",
+      value: "jarvis.commands",
+      category: "Jarvis",
+      slash: { name: "commands", aliases: ["cmds", "cmd"] },
+      onSelect: (dialog) => {
+        dialog.clear()
+        toast.show({
+          title: "Ultron — Slash Commands",
+          message:
+            "/help /commands /lock /sleep /sysinfo /shutdown /restart /open /search /install /uninstall /notify — All run offline instantly. Just type naturally too — Ultron understands plain English.",
+          duration: 12000,
+          variant: "info",
+        })
       },
     },
   ])

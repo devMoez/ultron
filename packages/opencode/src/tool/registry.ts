@@ -1,4 +1,10 @@
 import { PlanExitTool } from "./plan"
+import { OpenAppTool } from "./open_app"
+import { SystemInfoTool } from "./system_info"
+import { SearchSystemTool } from "./search_system"
+import { SystemPowerTool } from "./system_power"
+import { ManageSoftwareTool } from "./manage_software"
+import { SendNotificationTool } from "./send_notification"
 import { Session } from "../session"
 import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
@@ -114,6 +120,12 @@ export const layer: Layer.Layer<
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
+    const openApp = yield* OpenAppTool
+    const systemInfo = yield* SystemInfoTool
+    const searchSystem = yield* SearchSystemTool
+    const systemPower = yield* SystemPowerTool
+    const manageSoftware = yield* ManageSoftwareTool
+    const sendNotification = yield* SendNotificationTool
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -179,6 +191,12 @@ export const layer: Layer.Layer<
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
           bash: Tool.init(bash),
+          openApp: Tool.init(openApp),
+          systemInfo: Tool.init(systemInfo),
+          searchSystem: Tool.init(searchSystem),
+          systemPower: Tool.init(systemPower),
+          manageSoftware: Tool.init(manageSoftware),
+          sendNotification: Tool.init(sendNotification),
           read: Tool.init(read),
           glob: Tool.init(globtool),
           grep: Tool.init(greptool),
@@ -202,6 +220,12 @@ export const layer: Layer.Layer<
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
             tool.bash,
+            tool.openApp,
+            tool.systemInfo,
+            tool.searchSystem,
+            tool.systemPower,
+            tool.manageSoftware,
+            tool.sendNotification,
             tool.read,
             tool.glob,
             tool.grep,
