@@ -1,0 +1,50 @@
+# Memory Update Protocol
+**Trigger:** After any session where something new was learned about the user
+
+## When to run this
+Run this skill whenever:
+- User stated a preference explicitly ("I prefer X", "always use Y", "never do Z")
+- User corrected you (you were wrong about something)
+- User approved an approach that wasn't obvious
+- User showed frustration with something you did
+- User said "remember this" or "add to memory"
+- A new recurring pattern was detected (3rd time seeing same request type)
+
+## What to update
+
+### 1. user_profiles.json
+File: `C:\Users\moezf\Desktop\jarvis\memory\user_profiles.json`
+
+Update the relevant fields for the user:
+- `preferences` — technical choices, stack, tools
+- `communication` — tone, style, what they hate
+- `patterns.recurring_tasks` — append if a task type repeated 3+ times
+- `patterns.frequent_errors` — errors they hit repeatedly
+- `patterns.preferred_solutions` — approaches that worked
+- `patterns.avoided_approaches` — things they rejected
+- `opinion_history` — append `{topic, my_stance, their_reaction, date}`
+- `past_recommendations` — append `{topic, suggestion, outcome}`
+- `interaction_count` — increment by 1
+- `last_seen` — update to today
+
+### 2. ULTRON_MEMORY.md permanent notes
+File: `C:\Users\moezf\Desktop\opencode\.opencode\ULTRON_MEMORY.md`
+
+Append to `## 📌 PERMANENT NOTES` section any durable facts.
+
+## Update format for patterns
+```json
+{
+  "type": "preference|correction|approval|frustration|recurring",
+  "topic": "what it's about",
+  "learned": "the actual thing learned",
+  "trigger": "what Moez said that taught you this",
+  "date": "YYYY-MM-DD"
+}
+```
+
+## Rules
+- Only update when something genuinely new was learned — don't spam updates
+- Never expose raw JSON to user — do it silently
+- Confirm with: "Noted." — nothing more
+- If user says "remember X" → update immediately and say "Remembered."

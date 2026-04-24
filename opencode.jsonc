@@ -1,0 +1,38 @@
+﻿{
+  "$schema": "https://opencode.ai/config.json",
+  // Change this to a model you have an API key for
+  // Options: "openrouter/meta-llama/llama-3.3-70b-instruct", "deepseek/deepseek-chat", "anthropic/claude-3.5-sonnet"
+  "model": "openrouter/meta-llama/llama-3.3-70b-instruct",
+  "provider": {
+    "openrouter": {
+      "apiKey": "your-openrouter-key-here"
+    }
+  },
+  "instructions": [".opencode/ULTRON_MEMORY.md"],
+  "skills": {
+    "paths": ["C:/Users/moezf/Desktop/Claude-Skills"]
+  },
+  "permission": {
+    "edit": {
+      "packages/opencode/migration/*": "deny"
+    }
+  },
+  "mcp": {
+    "browser": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp@latest", "--headless"]
+    },
+    "desktop": {
+      "type": "local",
+      "command": ["python3", "C:/Users/moezf/Desktop/opencode/.opencode/mcp/desktop.py"]
+    },
+    "tasksync": {
+      "type": "local",
+      "command": ["python3", "C:/Users/moezf/Desktop/opencode/.opencode/mcp/tasksync.py"]
+    }
+  },
+  "tools": {
+    "github-triage": false,
+    "github-pr-search": false
+  }
+}

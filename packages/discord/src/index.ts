@@ -68,11 +68,13 @@ void (async () => {
 })()
 
 // ─── Wait for AI response ─────────────────────────────────────────────────────
-// userMessageID: the ID of the user's own message — skip its parts so we don't echo it back
-async function waitForResponse(sessionID: string, _userMessageID: string | undefined, timeoutMs = 120_000): Promise<string> {
+async function waitForResponse(sessionID: string, _unused: string | undefined, timeoutMs = 120_000): Promise<string> {
   return new Promise((resolve) => {
+    // Collect parts keyed by partID → latest text
     const parts = new Map<string, string>()
     let seenBusy = false
+    // First messageID we see belongs to the user — skip all its parts
+    let userMessageID: string | null = null
 
     const timer = setTimeout(() => {
       bus.off("event", handler)
@@ -96,14 +98,20 @@ async function waitForResponse(sessionID: string, _userMessageID: string | undef
         return
       }
 
-      // Only collect parts AFTER session has gone busy (AI is responding)
-      // This skips the user message parts that fire before the AI starts
-      if (!seenBusy) return
-
       if (event.type === "message.part.updated") {
         const part = event.properties.part
         if (part.sessionID !== sessionID) return
-        if (part.type === "text" && part.text) parts.set(part.id, part.text)
+        if (part.type !== "text" || !part.text) return
+
+        // First messageID = user's own message → skip it entirely
+        if (!userMessageID) {
+          userMessageID = part.messageID
+          return
+        }
+        if (part.messageID === userMessageID) return
+
+        // Everything else = assistant response
+        parts.set(part.id, part.text)
       }
     }
 

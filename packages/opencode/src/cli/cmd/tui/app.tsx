@@ -945,24 +945,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         })
       },
     },
-    {
-      title: "Autopilot — Toggle auto-approve all permissions",
-      value: "jarvis.autopilot",
-      category: "Jarvis",
-      slash: { name: "autopilot", aliases: ["auto", "yolo"] },
-      onSelect: (dialog) => {
-        dialog.clear()
-        const now = Autopilot.toggle()
-        toast.show({
-          title: `Autopilot ${now ? "ON 🟢" : "OFF 🔴"}`,
-          message: now
-            ? "All permission prompts auto-approved. Ultron will execute without asking."
-            : "Autopilot disabled. Permission prompts restored.",
-          variant: now ? "info" : "warning",
-          duration: 4000,
-        })
-      },
-    },
   ])
 
   event.on(TuiEvent.CommandExecute.type, (evt) => {
