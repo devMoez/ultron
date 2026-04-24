@@ -107,6 +107,10 @@ export function Prompt(props: PromptProps) {
   const { theme, syntax } = useTheme()
   const kv = useKV()
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
+  const [handsMode, setHandsMode] = kv.signal("hands_mode", false)
+  const [autopilot, setAutopilot] = kv.signal("autopilot", false)
+  const mcpConnected = createMemo(() => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length)
+  const mcpHasError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const [auto, setAuto] = createSignal<AutocompleteRef>()
@@ -390,6 +394,16 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: autopilot() ? "Disable autopilot" : "Enable autopilot",
+        value: "prompt.autopilot.toggle",
+        category: "Prompt",
+        slash: { name: "autopilot" },
+        onSelect: (dialog) => {
+          setAutopilot((prev) => !prev)
+          dialog.clear()
+        },
+      },
+      {
         title: "Skills",
         value: "prompt.skills",
         category: "Prompt",
@@ -642,6 +656,27 @@ export function Prompt(props: PromptProps) {
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
+      return true
+    }
+    if (trimmed === "/hands on" || trimmed === "/hands off") {
+      const enabled = trimmed === "/hands on"
+      setHandsMode(enabled)
+      void Bun.write(
+        "C:/Users/moezf/Desktop/jarvis/memory/hands_mode.json",
+        JSON.stringify({ enabled }, null, 2),
+      ).catch(() => {})
+      toast.show({
+        message: enabled
+          ? "Hands mode enabled. I will use mouse/keyboard/screenshots."
+          : "Hands mode disabled. I will use terminal and file commands only.",
+        variant: "success",
+        duration: 3000,
+      })
+      input.clear()
+      input.extmarks.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      props.onSubmit?.()
       return true
     }
     const selectedModel = local.model.current()
@@ -1250,13 +1285,21 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box width="100%" flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={props.hint ?? <text />}>
-            <box
-              flexDirection="row"
-              gap={1}
-              flexGrow={1}
-              justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
-            >
+          {/* Left: status indicators always visible + spinner when busy */}
+          <box flexDirection="row" gap={2} flexShrink={0}>
+            <text>
+              <span style={{ fg: autopilot() ? theme.success : theme.error }}>●</span>
+              <span style={{ fg: theme.textMuted }}> autopilot</span>
+            </text>
+            <text>
+              <span style={{ fg: mcpConnected() > 0 ? (mcpHasError() ? theme.error : theme.success) : theme.textMuted }}>⊙</span>
+              <span style={{ fg: theme.textMuted }}> {mcpConnected()} MCP</span>
+            </text>
+            <text>
+              <span style={{ fg: handsMode() ? theme.primary : theme.textMuted }}>◈</span>
+              <span style={{ fg: theme.textMuted }}> hands</span>
+            </text>
+            <Show when={status().type !== "idle"}>
               <box flexShrink={0} flexDirection="row" gap={1}>
                 <box marginLeft={1}>
                   <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
@@ -1322,44 +1365,49 @@ export function Prompt(props: PromptProps) {
                   })()}
                 </box>
               </box>
+            </Show>
+          </box>
+          {/* Right: esc interrupt when busy, context/commands otherwise */}
+          <box gap={2} flexDirection="row" flexShrink={0}>
+            <Show when={status().type !== "idle"}>
               <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
                 esc{" "}
                 <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
                   {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
                 </span>
               </text>
-            </box>
-          </Show>
-          <Show when={status().type !== "retry"}>
-            <box gap={2} flexDirection="row">
-              <Switch>
-                <Match when={store.mode === "normal"}>
-                  <Switch>
-                    <Match when={usage()}>
-                      {(item) => (
-                        <text fg={theme.textMuted} wrapMode="none">
-                          {[item().context, item().cost].filter(Boolean).join(" · ")}
+            </Show>
+            <Show when={status().type !== "retry"}>
+              <box gap={2} flexDirection="row">
+                <Switch>
+                  <Match when={store.mode === "normal"}>
+                    <Switch>
+                      <Match when={usage()}>
+                        {(item) => (
+                          <text fg={theme.textMuted} wrapMode="none">
+                            {[item().context, item().cost].filter(Boolean).join(" · ")}
+                          </text>
+                        )}
+                      </Match>
+                      <Match when={true}>
+                        <text fg={theme.text}>
+                          {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
                         </text>
-                      )}
-                    </Match>
-                    <Match when={true}>
-                      <text fg={theme.text}>
-                        {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
-                      </text>
-                    </Match>
-                  </Switch>
-                  <text fg={theme.text}>
-                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
-                  </text>
-                </Match>
-                <Match when={store.mode === "shell"}>
-                  <text fg={theme.text}>
-                    esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
-                  </text>
-                </Match>
-              </Switch>
-            </box>
-          </Show>
+                      </Match>
+                    </Switch>
+                    <text fg={theme.text}>
+                      {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                    </text>
+                  </Match>
+                  <Match when={store.mode === "shell"}>
+                    <text fg={theme.text}>
+                      esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                    </text>
+                  </Match>
+                </Switch>
+              </box>
+            </Show>
+          </box>
         </box>
       </box>
     </>

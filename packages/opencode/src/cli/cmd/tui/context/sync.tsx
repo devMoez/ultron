@@ -22,6 +22,7 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "@tui/context/project"
 import { useEvent } from "@tui/context/event"
 import { useSDK } from "@tui/context/sdk"
+import { Autopilot } from "./autopilot"
 import { Binary } from "@opencode-ai/shared/util/binary"
 import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
@@ -133,6 +134,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "permission.asked": {
           const request = event.properties
+          if (Autopilot.enabled) {
+            void sdk.client.permission.reply({ reply: "always", id: request.id, sessionID: request.sessionID })
+            break
+          }
           const requests = store.permission[request.sessionID]
           if (!requests) {
             setStore("permission", request.sessionID, [request])

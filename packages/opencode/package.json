@@ -18,7 +18,7 @@
     "db": "bun drizzle-kit"
   },
   "bin": {
-    "ultron": "bin/ultron.cjs"
+    "ultron": "./bin/ultron.cjs"
   },
   "exports": {
     "./*": "./src/*.ts"
@@ -180,12 +180,5 @@
   },
   "overrides": {
     "drizzle-orm": "catalog:"
-  },
-  "description": "To install dependencies:",
-  "main": "index.js",
-  "directories": {
-    "test": "test"
-  },
-  "keywords": [],
-  "author": ""
+  }
 }

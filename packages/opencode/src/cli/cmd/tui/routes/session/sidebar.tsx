@@ -1,6 +1,6 @@
 import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
-import { createMemo, Show } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../context/tui-config"
 import { InstallationChannel, InstallationVersion } from "@/installation/version"
@@ -27,6 +27,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     return `${info.type}: ${info.name}`
   }
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const [hovered, setHovered] = createSignal(false)
 
   return (
     <Show when={session()}>
@@ -39,11 +40,18 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         paddingLeft={2}
         paddingRight={2}
         position={props.overlay ? "absolute" : "relative"}
+        onMouseOver={() => setHovered(true)}
+        onMouseOut={() => setHovered(false)}
       >
         <scrollbox
           flexGrow={1}
           scrollAcceleration={scrollAcceleration()}
+          viewportOptions={{
+            paddingRight: hovered() ? 1 : 0,
+          }}
           verticalScrollbarOptions={{
+            paddingLeft: 1,
+            visible: hovered(),
             trackOptions: {
               backgroundColor: theme.background,
               foregroundColor: theme.borderActive,

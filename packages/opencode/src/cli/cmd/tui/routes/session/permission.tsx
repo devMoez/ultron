@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
@@ -18,6 +18,7 @@ import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
+import { useKV } from "../../context/kv"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -134,8 +135,20 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
   const sdk = useSDK()
   const project = useProject()
   const sync = useSync()
+  const kv = useKV()
+  const autopilot = () => kv.get("autopilot", false)
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
+  })
+
+  // When autopilot is on, auto-approve all permissions silently
+  createEffect(() => {
+    if (!autopilot()) return
+    void sdk.client.permission.reply({
+      reply: "always",
+      requestID: props.request.id,
+      workspace: project.workspace.current(),
+    })
   })
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
@@ -155,6 +168,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
   const { theme } = useTheme()
 
   return (
+    <Show when={!autopilot()}>
     <Switch>
       <Match when={store.stage === "always"}>
         <Prompt
@@ -471,6 +485,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
         })()}
       </Match>
     </Switch>
+    </Show>
   )
 }
 

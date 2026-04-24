@@ -29,3 +29,24 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Secrets and credentials
+credentials.json
+secrets*
+*secret*
+*.key
+*.pem
+.env.local
+.env.*
+credentials*
+secrets/
+
+# Personal memory (contains private info)
+ultron_memory.json
+.jarvis/
+memory/
+*.memory.json
+
+# MCP config (may contain tokens)
+.mcp/
+.mcp.json

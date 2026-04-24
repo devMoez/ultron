@@ -57,6 +57,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { execSync, exec as execCb } from "child_process"
 import os from "os"
+import { Autopilot } from "./context/autopilot"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
@@ -321,7 +322,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       }
 
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      renderer.setTerminalTitle(`Ultron | ${title}`)
       return
     }
 
@@ -938,9 +939,27 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         toast.show({
           title: "Ultron — Slash Commands",
           message:
-            "/help /commands /lock /sleep /sysinfo /shutdown /restart /open /search /install /uninstall /notify — All run offline instantly. Just type naturally too — Ultron understands plain English.",
+            "/help /commands /lock /sleep /sysinfo /shutdown /restart /open /search /install /uninstall /notify /autopilot — All run offline instantly. Just type naturally too — Ultron understands plain English.",
           duration: 12000,
           variant: "info",
+        })
+      },
+    },
+    {
+      title: "Autopilot — Toggle auto-approve all permissions",
+      value: "jarvis.autopilot",
+      category: "Jarvis",
+      slash: { name: "autopilot", aliases: ["auto", "yolo"] },
+      onSelect: (dialog) => {
+        dialog.clear()
+        const now = Autopilot.toggle()
+        toast.show({
+          title: `Autopilot ${now ? "ON 🟢" : "OFF 🔴"}`,
+          message: now
+            ? "All permission prompts auto-approved. Ultron will execute without asking."
+            : "Autopilot disabled. Permission prompts restored.",
+          variant: now ? "info" : "warning",
+          duration: 4000,
         })
       },
     },

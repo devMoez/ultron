@@ -170,13 +170,16 @@ const resolved = findBinary(scriptDir)
 if (!resolved) {
   // No compiled binary found — fall back to running the TypeScript source
   // directly with bun (local / development mode).
-  const packageDir = path.resolve(scriptDir, "..")
-  const srcEntry = path.join(packageDir, "src", "index.ts")
+  const srcEntry = path.join(scriptDir, "..", "src", "index.ts")
   if (fs.existsSync(srcEntry)) {
+    // Root project dir is 3 levels up from bin/ → packages/opencode/bin → packages/opencode → packages → root
+    const projectRoot = path.join(scriptDir, "..", "..", "..")
+    const rootEnv = path.join(projectRoot, ".env")
+    const envFileArgs = fs.existsSync(rootEnv) ? ["--env-file", rootEnv] : []
     const bun = childProcess.spawnSync(
       process.platform === "win32" ? "bun.exe" : "bun",
-      ["run", "--conditions=browser", srcEntry, ...process.argv.slice(2)],
-      { stdio: "inherit", cwd: packageDir },
+      ["run", ...envFileArgs, "--conditions=browser", srcEntry, ...process.argv.slice(2)],
+      { stdio: "inherit", cwd: path.join(scriptDir, "..") },
     )
     if (bun.error) {
       console.error(
