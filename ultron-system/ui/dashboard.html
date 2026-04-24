@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ultron Master Dashboard</title>
+<style>
+  :root {
+    --bg:      #0c0c0f;
+    --surface: #13131a;
+    --card:    #17171f;
+    --border:  #1e1e2a;
+    --accent:  #6c63ff;
+    --green:   #22c55e;
+    --red:     #ef4444;
+    --yellow:  #f59e0b;
+    --blue:    #3b82f6;
+    --purple:  #a855f7;
+    --teal:    #14b8a6;
+    --text:    #e2e2ec;
+    --muted:   #55556b;
+  }
+
+  /* Agent accent colors */
+  .agent-orchestrator { --a: #6c63ff; }
+  .agent-planner      { --a: #a855f7; }
+  .agent-builder      { --a: #f59e0b; }
+  .agent-designer     { --a: #ec4899; }
+  .agent-debugger     { --a: #ef4444; }
+  .agent-verifier     { --a: #22c55e; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; min-height: 100vh; }
+
+  /* ── Header ── */
+  header {
+    padding: 10px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 20;
+  }
+  .logo { font-size: 16px; font-weight: 700; letter-spacing: .1em; }
+  .logo span { color: var(--accent); }
+  .hdr-right { display: flex; align-items: center; gap: 20px; font-size: 12px; color: var(--muted); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 5px; }
+  .dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.warn { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+
+  /* ── Layout ── */
+  .main { padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+
+  /* ── Agent grid ── */
+  .agents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+    gap: 14px;
+  }
+
+  /* ── Agent card ── */
+  .agent-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--a, var(--accent));
+    border-radius: 10px;
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+    transition: border-color .3s;
+  }
+  .agent-card.offline { opacity: .55; }
+
+  .agent-header { display: flex; align-items: center; justify-content: space-between; }
+  .agent-name { font-size: 14px; font-weight: 700; text-transform: capitalize; color: var(--a, var(--text)); }
+  .agent-pid { font-size: 10px; color: var(--muted); }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  }
+  .badge-alive   { background: #16532430; color: var(--green); border: 1px solid #22c55e40; }
+  .badge-offline { background: #7f1d1d30; color: var(--red);   border: 1px solid #ef444440; }
+  .badge-busy    { background: #78350f30; color: var(--yellow); border: 1px solid #f59e0b40; }
+
+  /* ── Metric bars ── */
+  .metrics { display: flex; flex-direction: column; gap: 7px; }
+  .metric-row { display: flex; align-items: center; gap: 8px; }
+  .metric-lbl { font-size: 10px; color: var(--muted); width: 36px; flex-shrink: 0; text-transform: uppercase; }
+  .metric-val { font-size: 11px; font-weight: 600; width: 46px; text-align: right; flex-shrink: 0; }
+  .bar-track { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 3px; transition: width .5s ease; background: var(--a, var(--accent)); }
+  .bar-ram   { background: var(--teal); }
+
+  /* ── Thread / uptime badges ── */
+  .agent-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+  .meta-chip {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 8px;
+    font-size: 10px; color: var(--muted);
+  }
+  .meta-chip span { color: var(--text); font-weight: 600; }
+
+  /* ── Current task ── */
+  .current-task {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--a, var(--accent));
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--muted);
+    min-height: 34px;
+  }
+  .current-task .task-text { color: var(--text); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── Task counters ── */
+  .task-counts { display: flex; gap: 6px; }
+  .count-box {
+    flex: 1; text-align: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 4px;
+  }
+  .count-num { font-size: 18px; font-weight: 700; }
+  .count-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 1px; }
+  .count-done   .count-num { color: var(--green); }
+  .count-fail   .count-num { color: var(--red); }
+  .count-busy   .count-num { color: var(--yellow); }
+  .count-queued .count-num { color: var(--blue); }
+
+  /* ── Bottom panels ── */
+  .bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .panel-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--muted);
+  }
+
+  /* ── Task list ── */
+  .task-list { display: flex; flex-direction: column; gap: 5px; max-height: 280px; overflow-y: auto; }
+  .task-row {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 7px 10px; border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--border);
+  }
+  .task-agent-tag {
+    font-size: 10px; font-weight: 700; border-radius: 3px;
+    padding: 1px 6px; flex-shrink: 0; align-self: center;
+  }
+  .task-desc { flex: 1; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .task-status { font-size: 10px; flex-shrink: 0; }
+
+  /* ── Log panel ── */
+  .log-box {
+    background: #090910; border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; height: 280px; overflow-y: auto;
+    font-family: 'Cascadia Code', Consolas, monospace; font-size: 11px; line-height: 1.65;
+  }
+  .log-line { display: flex; gap: 8px; }
+  .log-src { color: var(--accent); flex-shrink: 0; min-width: 88px; }
+  .log-txt { color: #7878a0; word-break: break-all; }
+  .log-txt.err  { color: var(--red); }
+  .log-txt.warn { color: var(--yellow); }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span>ULTRON</span> MASTER</div>
+  <div class="hdr-right">
+    <span><span class="dot" id="dot-swarm"></span>Swarm</span>
+    <span><span class="dot" id="dot-live"></span>Live</span>
+    <span id="uptime-hdr">--</span>
+    <button onclick="clearLogs()" style="background:var(--border);border:none;color:var(--muted);border-radius:5px;padding:3px 10px;cursor:pointer;font-size:11px">Clear logs</button>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- Agent cards -->
+  <div class="agents-grid" id="agents-grid">
+    <div style="color:var(--muted);padding:30px;text-align:center;grid-column:1/-1">Connecting to swarm…</div>
+  </div>
+
+  <!-- Bottom panels -->
+  <div class="bottom-row">
+    <!-- Recent tasks -->
+    <div class="panel">
+      <div class="panel-title">All Tasks</div>
+      <div class="task-list" id="task-list">
+        <div style="color:var(--muted);text-align:center;padding:20px">No tasks</div>
+      </div>
+    </div>
+
+    <!-- Logs -->
+    <div class="panel">
+      <div class="panel-title">Live Logs</div>
+      <div class="log-box" id="log-box"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const AGENT_COLORS = {
+  orchestrator: '#6c63ff',
+  planner:      '#a855f7',
+  builder:      '#f59e0b',
+  designer:     '#ec4899',
+  debugger:     '#ef4444',
+  verifier:     '#22c55e',
+}
+
+function fmtUptime(s) {
+  if (!s) return '--'
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
+  return h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`
+}
+function clamp(v) { return Math.min(100, Math.max(0, v || 0)) }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+// ── Render agents ──────────────────────────────────────────────────────────
+function renderAgents(agents) {
+  const grid = document.getElementById('agents-grid')
+  if (!agents || !Object.keys(agents).length) {
+    grid.innerHTML = '<div style="color:var(--muted);padding:30px;text-align:center;grid-column:1/-1">Swarm offline — start swarm/start.ps1</div>'
+    return
+  }
+
+  const order = ['orchestrator','planner','builder','designer','debugger','verifier']
+  const names = [...order.filter(n => agents[n]), ...Object.keys(agents).filter(n => !order.includes(n))]
+
+  grid.innerHTML = names.map(name => {
+    const a = agents[name]
+    const color = AGENT_COLORS[name] || '#6c63ff'
+    const alive = a.alive && a.proc_status !== 'offline'
+    const busy  = !!a.current_task
+
+    const badgeCls  = !alive ? 'badge-offline' : busy ? 'badge-busy' : 'badge-alive'
+    const badgeTxt  = !alive ? 'OFFLINE' : busy ? 'BUSY' : 'IDLE'
+    const cardCls   = alive ? '' : 'offline'
+
+    const cpuPct  = clamp(a.cpu)
+    const ramMax  = 512  // assume 512 MB max per agent for bar scale
+    const ramPct  = clamp((a.ram_mb / ramMax) * 100)
+
+    return `
+    <div class="agent-card agent-${name} ${cardCls}" style="--a:${color}">
+      <div class="agent-header">
+        <div class="agent-name">${name}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="badge ${badgeCls}">${badgeTxt}</span>
+          <span class="agent-pid">${a.pid ? 'PID ' + a.pid : ''}</span>
+        </div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric-row">
+          <span class="metric-lbl">CPU</span>
+          <span class="metric-val" style="color:${color}">${a.cpu.toFixed(1)}%</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${cpuPct}%;background:${color}"></div></div>
+        </div>
+        <div class="metric-row">
+          <span class="metric-lbl">RAM</span>
+          <span class="metric-val" style="color:var(--teal)">${a.ram_mb} MB</span>
+          <div class="bar-track"><div class="bar-fill bar-ram" style="width:${ramPct}%"></div></div>
+        </div>
+      </div>
+
+      <div class="agent-meta">
+        <div class="meta-chip">Threads <span>${a.threads}</span></div>
+        <div class="meta-chip">Up <span>${fmtUptime(a.uptime_s)}</span></div>
+        <div class="meta-chip">HB miss <span>${a.missed_hb}</span></div>
+        <div class="meta-chip">Restarts <span>${a.restarts}</span></div>
+      </div>
+
+      <div class="current-task">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em">Current Task</div>
+        <div class="task-text">${a.current_task ? esc(a.current_task) : '<span style="color:var(--muted)">Idle</span>'}</div>
+      </div>
+
+      <div class="task-counts">
+        <div class="count-box count-done">
+          <div class="count-num">${a.tasks_done || 0}</div>
+          <div class="count-lbl">Done</div>
+        </div>
+        <div class="count-box count-fail">
+          <div class="count-num">${a.tasks_failed || 0}</div>
+          <div class="count-lbl">Failed</div>
+        </div>
+        <div class="count-box count-busy">
+          <div class="count-num">${a.tasks_assigned || 0}</div>
+          <div class="count-lbl">Active</div>
+        </div>
+        <div class="count-box count-queued">
+          <div class="count-num">${a.tasks_queued || 0}</div>
+          <div class="count-lbl">Queued</div>
+        </div>
+      </div>
+    </div>`
+  }).join('')
+}
+
+// ── Render task list ───────────────────────────────────────────────────────
+function renderTasks(tasks) {
+  const el = document.getElementById('task-list')
+  if (!tasks || !tasks.length) {
+    el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">No tasks yet</div>'
+    return
+  }
+  const icons = { done:'✅', failed:'❌', queued:'📋', assigned:'⏳' }
+  el.innerHTML = tasks.map(t => {
+    const color = AGENT_COLORS[t.assigned_agent] || '#6c63ff'
+    return `<div class="task-row">
+      <span class="task-agent-tag" style="background:${color}22;color:${color}">${t.assigned_agent || '?'}</span>
+      <span class="task-desc">${esc((t.description||'').slice(0,80))}</span>
+      <span class="task-status">${icons[t.status] || '❓'}</span>
+    </div>`
+  }).join('')
+}
+
+// ── Logs ──────────────────────────────────────────────────────────────────
+let logBuf = []
+function appendLogs(logs) {
+  if (!logs || !logs.length) return
+  const box = document.getElementById('log-box')
+  const atBottom = box.scrollHeight - box.scrollTop <= box.clientHeight + 40
+  logs.forEach(l => {
+    const cls = /error|exception|fail/i.test(l.line) ? 'err' : /warn/i.test(l.line) ? 'warn' : ''
+    const color = AGENT_COLORS[l.source] || '#6c63ff'
+    logBuf.push(`<div class="log-line"><span class="log-src" style="color:${color}">${l.source}</span><span class="log-txt ${cls}">${esc(l.line)}</span></div>`)
+  })
+  if (logBuf.length > 400) logBuf = logBuf.slice(-400)
+  box.innerHTML = logBuf.join('')
+  if (atBottom) box.scrollTop = box.scrollHeight
+}
+function clearLogs() { logBuf = []; document.getElementById('log-box').innerHTML = '' }
+
+// ── Dot helper ─────────────────────────────────────────────────────────────
+function dot(id, on, warn) {
+  const el = document.getElementById(id)
+  if (!el) return
+  el.className = 'dot' + (on ? (warn ? ' warn' : ' on') : '')
+}
+
+// ── SSE ────────────────────────────────────────────────────────────────────
+let src
+function connect() {
+  src = new EventSource('/stream')
+  src.onopen  = () => dot('dot-live', true)
+  src.onerror = () => { dot('dot-live', false); setTimeout(connect, 3000) }
+  src.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data)
+      if (d.error) return
+      dot('dot-swarm', d.swarm_online)
+      dot('dot-live', true)
+      document.getElementById('uptime-hdr').textContent = 'Up ' + fmtUptime(d.uptime)
+      renderAgents(d.agents)
+      renderTasks(d.tasks)
+      appendLogs(d.logs)
+    } catch(err) { console.warn('parse', err) }
+  }
+}
+connect()
+</script>
+</body>
+</html>
