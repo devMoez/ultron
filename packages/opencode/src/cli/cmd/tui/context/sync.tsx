@@ -135,7 +135,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         case "permission.asked": {
           const request = event.properties
           if (Autopilot.enabled) {
-            void sdk.client.permission.reply({ reply: "always", requestID: request.id, sessionID: request.sessionID })
+            void sdk.client.permission.reply({ reply: "always", requestID: request.id })
             break
           }
           const requests = store.permission[request.sessionID]
