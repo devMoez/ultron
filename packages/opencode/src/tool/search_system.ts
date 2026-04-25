@@ -43,7 +43,7 @@ export const SearchSystemTool = Tool.define(
     description: DESCRIPTION,
     parameters: Parameters,
     execute: (params: z.infer<typeof Parameters>, _ctx: Tool.Context) =>
-      Effect.tryPromise(async () => {
+      Effect.gen(function* () {
         const platform = os.platform()
         const searchRoot = params.searchIn ?? os.homedir()
         const maxResults = params.maxResults ?? 20
@@ -66,9 +66,11 @@ $results = Get-ChildItem -Path "${searchRoot.replace(/"/g, '`"')}" ` +
 $results
 `.trim()
 
-          const { stdout } = await execAsync(`powershell -NoProfile -Command "${ps.replace(/\n/g, " ").replace(/"/g, '\\"')}"`, {
-            timeout: 30000,
-          })
+          const { stdout } = yield* Effect.tryPromise(() =>
+            execAsync(`powershell -NoProfile -Command "${ps.replace(/\n/g, " ").replace(/"/g, '\\"')}"`, {
+              timeout: 30000,
+            }),
+          ).pipe(Effect.orDie)
 
           results = stdout
             .split("\n")
@@ -76,10 +78,12 @@ $results
             .filter(Boolean)
         } else {
           const typeFlag = params.type === "file" ? "-type f" : params.type === "folder" ? "-type d" : ""
-          const { stdout } = await execAsync(
-            `find "${searchRoot}" -name "${params.query}" ${typeFlag} 2>/dev/null | head -${maxResults}`,
-            { timeout: 30000 },
-          )
+          const { stdout } = yield* Effect.tryPromise(() =>
+            execAsync(
+              `find "${searchRoot}" -name "${params.query}" ${typeFlag} 2>/dev/null | head -${maxResults}`,
+              { timeout: 30000 },
+            ),
+          ).pipe(Effect.orDie)
           results = stdout
             .split("\n")
             .map((l) => l.trim())
@@ -90,7 +94,7 @@ $results
           return {
             title: `No results for: ${params.query}`,
             output: `No files or folders matching "${params.query}" found in "${searchRoot}".\n\nTry:\n- A different search pattern (e.g. use wildcards: *.pdf)\n- A different directory (e.g. "C:\\" to search the whole drive)\n- Checking spelling`,
-            metadata: { query: params.query, searchIn: searchRoot, count: 0, results: [] },
+            metadata: { query: params.query, searchIn: searchRoot, count: 0, results: [] as string[] },
           }
         }
 
@@ -106,7 +110,7 @@ $results
         return {
           title: `Found ${results.length} result(s) for: ${params.query}`,
           output,
-          metadata: { query: params.query, searchIn: searchRoot, count: results.length, results, error: undefined },
+          metadata: { query: params.query, searchIn: searchRoot, count: results.length, results },
         }
       }),
   }),

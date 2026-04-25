@@ -31,7 +31,7 @@ export const OpenAppTool = Tool.define(
     description: DESCRIPTION,
     parameters: Parameters,
     execute: (params: z.infer<typeof Parameters>, _ctx: Tool.Context) =>
-      Effect.tryPromise(async () => {
+      Effect.gen(function* () {
         const platform = os.platform()
         let command: string
 
@@ -43,19 +43,11 @@ export const OpenAppTool = Tool.define(
           command = `xdg-open "${params.target.replace(/"/g, '\\"')}"`
         }
 
-        try {
-          await execAsync(command)
-          return {
-            title: `Opened: ${params.target}`,
-            output: `✓ Successfully opened: ${params.target}`,
-            metadata: { target: params.target, platform, error: undefined },
-          }
-        } catch (err) {
-          return {
-            title: `Failed to open: ${params.target}`,
-            output: `✗ Could not open "${params.target}": ${err instanceof Error ? err.message : String(err)}\n\nMake sure the app is installed or the path/URL is valid.`,
-            metadata: { target: params.target, platform, error: String(err) },
-          }
+        yield* Effect.tryPromise(() => execAsync(command)).pipe(Effect.orDie)
+        return {
+          title: `Opened: ${params.target}`,
+          output: `✓ Successfully opened: ${params.target}`,
+          metadata: { target: params.target, platform },
         }
       }),
   }),
