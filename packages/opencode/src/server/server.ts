@@ -71,8 +71,8 @@ function create(opts: { cors?: string[] }) {
           .use(WorkspaceRouterMiddleware(runtime.upgradeWebSocket)),
       )
       .route("/", InstanceRoutes(runtime.upgradeWebSocket))
-      .route("/", UIRoutes())
-      .get("/ultron", (c) => c.html(ULTRON_SIDEBAR_HTML)),
+      .get("/", (c) => c.html(ULTRON_SIDEBAR_HTML))
+      .route("/", UIRoutes()),
     runtime,
   }
 }
