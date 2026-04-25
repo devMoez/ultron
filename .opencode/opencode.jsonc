@@ -9,15 +9,23 @@
   // ─────────────────────────────────────────────────────────────────
   "model": "cloudflare-workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 
+  // ── Only show free/Zen providers – hides all paid APIs from the model picker
+  "enabled_providers": [
+    "cloudflare-workers-ai",
+    "nemotron-3-super-free",
+    "minimax",
+    "hy3-preview-free",
+    "mimo-v2-flash-free",
+    "mimo-v2-omni-free",
+    "mimo-v2-pro-free",
+    "glm-5-free",
+    "trinity-large-preview-free",
+    "zenmux"
+  ],
+
   "provider": {
-    // Cloudflare Workers AI – free tier (included in OpenCode Zen)
-    "cloudflare-workers-ai": {
-      // No API key needed for Zen models – uses OpenCode's internal free quota
-    },
-    // DeepSeek – keep your API key for when you need the reasoner or faster responses
-    "deepseek": {
-      "apiKey": "{env:DEEPSEEK_API_KEY}"
-    }
+    // Cloudflare Workers AI – free tier, no API key needed
+    "cloudflare-workers-ai": {}
   },
 
   "instructions": [".opencode/ULTRON_MEMORY.md"],
