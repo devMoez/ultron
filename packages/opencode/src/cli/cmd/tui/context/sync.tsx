@@ -380,71 +380,55 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const agentsPromise = sdk.client.app.agents({ workspace }, { throwOnError: true })
       const configPromise = sdk.client.config.get({ workspace }, { throwOnError: true })
       const projectPromise = project.sync()
+      // Only block on absolute minimum — providers + project.
+      // Agents, config, sessions load in background so TUI renders instantly.
       const blockingRequests: Promise<unknown>[] = [
         providersPromise,
         providerListPromise,
-        agentsPromise,
-        configPromise,
         projectPromise,
         ...(args.continue ? [sessionListPromise] : []),
       ]
 
       await Promise.all(blockingRequests)
         .then(async () => {
-          const providersResponse = providersPromise.then((x) => x.data!)
-          const providerListResponse = providerListPromise.then((x) => x.data!)
-          const consoleStateResponse = consoleStatePromise
-          const agentsResponse = agentsPromise.then((x) => x.data ?? [])
-          const configResponse = configPromise.then((x) => x.data!)
-          const sessionListResponse = args.continue ? sessionListPromise : undefined
+          // Apply blocking results immediately so TUI can render
+          const [providers, providerList] = await Promise.all([
+            providersPromise.then((x) => x.data!),
+            providerListPromise.then((x) => x.data!),
+          ])
+          const sessions = args.continue ? await sessionListPromise : undefined
 
-          return Promise.all([
-            providersResponse,
-            providerListResponse,
-            consoleStateResponse,
-            agentsResponse,
-            configResponse,
-            ...(sessionListResponse ? [sessionListResponse] : []),
-          ]).then((responses) => {
-            const providers = responses[0]
-            const providerList = responses[1]
-            const consoleState = responses[2]
-            const agents = responses[3]
-            const config = responses[4]
-            const sessions = responses[5]
-
-            batch(() => {
-              setStore("provider", reconcile(providers.providers))
-              setStore("provider_default", reconcile(providers.default))
-              setStore("provider_next", reconcile(providerList))
-              setStore("console_state", reconcile(consoleState))
-              setStore("agent", reconcile(agents))
-              setStore("config", reconcile(config))
-              if (sessions !== undefined) setStore("session", reconcile(sessions))
-            })
+          batch(() => {
+            setStore("provider", reconcile(providers.providers))
+            setStore("provider_default", reconcile(providers.default))
+            setStore("provider_next", reconcile(providerList))
+            if (sessions !== undefined) setStore("session", reconcile(sessions))
           })
         })
         .then(() => {
           if (store.status !== "complete") setStore("status", "partial")
-          // non-blocking
+          // Priority non-blocking: agent tabs + last session + MCP + autopilot state first
           void Promise.all([
-            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
-            consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState))),
-            sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? []))),
-            sdk.client.lsp.status({ workspace }).then((x) => setStore("lsp", reconcile(x.data ?? []))),
+            // P1 — needed for agent tabs and current session
+            agentsPromise.then((x) => setStore("agent", reconcile(x.data ?? []))),
+            configPromise.then((x) => setStore("config", reconcile(x.data!))),
+            ...(args.continue ? [] : [sessionListPromise.then((s) => setStore("session", reconcile(s)))]),
             sdk.client.mcp.status({ workspace }).then((x) => setStore("mcp", reconcile(x.data ?? {}))),
-            sdk.client.experimental.resource
-              .list({ workspace })
-              .then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
-            sdk.client.formatter.status({ workspace }).then((x) => setStore("formatter", reconcile(x.data ?? []))),
-            sdk.client.session.status({ workspace }).then((x) => {
-              setStore("session_status", reconcile(x.data ?? {}))
-            }),
-            sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
-            sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
-            project.workspace.sync(),
+            sdk.client.session.status({ workspace }).then((x) => setStore("session_status", reconcile(x.data ?? {}))),
+            consoleStatePromise.then((s) => setStore("console_state", reconcile(s))),
           ]).then(() => {
-            setStore("status", "complete")
+            // P2 — background, don't block anything
+            void Promise.all([
+              sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? []))),
+              sdk.client.lsp.status({ workspace }).then((x) => setStore("lsp", reconcile(x.data ?? []))),
+              sdk.client.experimental.resource.list({ workspace }).then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
+              sdk.client.formatter.status({ workspace }).then((x) => setStore("formatter", reconcile(x.data ?? []))),
+              sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
+              sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
+              project.workspace.sync(),
+            ]).then(() => {
+              setStore("status", "complete")
+            })
           })
         })
         .catch(async (e) => {

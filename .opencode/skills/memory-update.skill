@@ -10,38 +10,78 @@ Run this skill whenever:
 - User said "remember this" or "add to memory"
 - A new recurring pattern was detected (3rd time seeing same request type)
 
-## What to update
+## Paths (All in opencode)
+| File | Path |
+|------|------|
+| User profile | `C:\Users\moezf\Desktop\opencode\memory\user_profiles.json` |
+| Session state | `C:\Users\moezf\Desktop\opencode\memory\sessions.json` |
+| Projects | `C:\Users\moezf\Desktop\opencode\memory\projects.json` |
+| Hands mode | `C:\Users\moezf\Desktop\opencode\memory\hands_mode.json` |
+| ULTRON_MEMORY | `C:\Users\moezf\Desktop\opencode\.opencode\ULTRON_MEMORY.md` |
 
-### 1. user_profiles.json
-File: `C:\Users\moezf\Desktop\jarvis\memory\user_profiles.json`
+## Session Rolling Protocol
 
-Update the relevant fields for the user:
-- `preferences` — technical choices, stack, tools
-- `communication` — tone, style, what they hate
-- `patterns.recurring_tasks` — append if a task type repeated 3+ times
-- `patterns.frequent_errors` — errors they hit repeatedly
-- `patterns.preferred_solutions` — approaches that worked
-- `patterns.avoided_approaches` — things they rejected
-- `opinion_history` — append `{topic, my_stance, their_reaction, date}`
-- `past_recommendations` — append `{topic, suggestion, outcome}`
-- `interaction_count` — increment by 1
-- `last_seen` — update to today
+### At Session Start
+1. Read `sessions.json` → get `current_session`
+2. Load that session's state (todos, completed, errors, active_project)
+3. If active_project exists → set as context
 
-### 2. ULTRON_MEMORY.md permanent notes
-File: `C:\Users\moezf\Desktop\opencode\.opencode\ULTRON_MEMORY.md`
+### After Each Exchange
+1. Update current session's todos/completed in sessions.json
+2. On 3rd session start: roll over
+   - session 2 → 1, session 1 → cleared, session 3 → 2
 
-Append to `## 📌 PERMANENT NOTES` section any durable facts.
-
-## Update format for patterns
+### Session Structure
 ```json
 {
-  "type": "preference|correction|approval|frustration|recurring",
-  "topic": "what it's about",
-  "learned": "the actual thing learned",
-  "trigger": "what Moez said that taught you this",
-  "date": "YYYY-MM-DD"
+  "current_session": 1,
+  "sessions": {
+    "1": { "todos": [], "completed": [], "errors": [], "active_project": null },
+    "2": { "todos": [], "completed": [], "errors": [], "active_project": null },
+    "3": { "todos": [], "completed": [], "errors": [], "active_project": null }
+  }
 }
 ```
+
+## Project Memory Protocol
+
+### When Working on a Project
+1. Create/update `.ultron/project.json` in project folder
+2. Save: path, requirements, status, todos, history
+
+### When Asked About a Project
+1. Check `memory/projects.json` for path
+2. Or check `.ultron/project.json` in project folder
+
+### Project Structure
+```json
+{
+  "path": "C:/Users/moezf/Desktop/projectX",
+  "name": "projectX",
+  "requirements": ["feature1", "feature2"],
+  "status": "in_progress|done|paused",
+  "todos": [{"task": "do X", "status": "pending"}],
+  "created": "2026-04-25",
+  "last_updated": "2026-04-25"
+}
+```
+
+## Task Resume Protocol
+
+### On Reconnect/Wake
+1. Read sessions.json → find any session with pending todos
+2. Load active_project from last session
+3. Show: "Resuming X with N tasks pending"
+4. Continue without asking
+
+### When Task Completes
+1. Move to completed list in sessions.json
+2. Update project status if applicable
+3. Notify user with result
+
+### When Task Fails
+1. Log error in sessions.json current session
+2. Notify user: "X failed: [error]"
 
 ## Rules
 - Only update when something genuinely new was learned — don't spam updates

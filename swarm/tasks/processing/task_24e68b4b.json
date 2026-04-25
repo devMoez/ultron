@@ -1,0 +1,7 @@
+{
+  "target_agent": "verifier",
+  "description": "Test the chess app: verify both modes work (play vs bot, analysis board), Stockfish loads and responds, board flips correctly, color switching works, best move arrows display.",
+  "project_path": "C:\\Users\\moezf\\Desktop\\jarvis\\projects\\chess-engine",
+  "submitted_at": 1777049248.400448,
+  "source": "ultron-mcp"
+}

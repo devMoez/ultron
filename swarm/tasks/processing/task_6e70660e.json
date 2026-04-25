@@ -1,0 +1,7 @@
+{
+  "target_agent": "planner",
+  "description": "Build chess app UI: board, pieces, controls, dark theme minimal. Need play mode vs bot, analysis board modes",
+  "project_path": "",
+  "submitted_at": 1777084667.3354673,
+  "source": "ultron-mcp"
+}

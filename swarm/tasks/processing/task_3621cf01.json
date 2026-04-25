@@ -1,0 +1,7 @@
+{
+  "target_agent": "builder",
+  "description": "Test task: create a simple hello.txt file",
+  "project_path": "",
+  "submitted_at": 1777082694.305932,
+  "source": "ultron-mcp"
+}

@@ -1,4 +1,4 @@
-# Ultron Master Dashboard — Launch Script
+# Ultron Tracker Dashboard — Launch Script
 # Pauses on crash so you can read the error.
 
 $Root    = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -17,7 +17,7 @@ $ReqFile = Join-Path $Root "requirements.txt"
 & $Python -m pip install -r $ReqFile --quiet
 
 Write-Host ""
-Write-Host "  ULTRON MASTER DASHBOARD" -ForegroundColor Cyan
+Write-Host "  ULTRON TRACKER DASHBOARD" -ForegroundColor Cyan
 Write-Host "  http://127.0.0.1:5010" -ForegroundColor Green
 Write-Host ""
 

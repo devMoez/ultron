@@ -1,0 +1,7 @@
+{
+  "target_agent": "builder",
+  "description": "Chess game logic: move validation with chess.js, Stockfish WASM integration (stockfish.js from npm), best move analysis, game state management. Two modes: play vs bot and free analysis board.",
+  "project_path": "C:\\Users\\moezf\\Desktop\\jarvis\\projects\\chess-engine",
+  "submitted_at": 1777049242.5292594,
+  "source": "ultron-mcp"
+}

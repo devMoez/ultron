@@ -62,7 +62,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
+          // Default to ultron agent if set, otherwise first agent
+          const saved = agentStore.current
+          if (saved && agents().some((x) => x.name === saved)) return agents().find((x) => x.name === saved)
+          if (agents().some((x) => x.name === "ultron")) return agents().find((x) => x.name === "ultron")
+          return agents().at(0)
         },
         set(name: string) {
           if (!agents().some((x) => x.name === name))
@@ -72,6 +76,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               duration: 3000,
             })
           setAgentStore("current", name)
+          // Persist agent selection
+          void Filesystem.writeJson(path.join(Global.Path.state, "agent.json"), {
+            current: name,
+          })
         },
         move(direction: 1 | -1) {
           batch(() => {
@@ -82,6 +90,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (next >= agents().length) next = 0
             const value = agents()[next]
             setAgentStore("current", value.name)
+            // Persist agent selection
+            void Filesystem.writeJson(path.join(Global.Path.state, "agent.json"), {
+              current: value.name,
+            })
           })
         },
         color(name: string) {

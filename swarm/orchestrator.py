@@ -23,8 +23,14 @@ sys.path.insert(0, str(SWARM_ROOT))
 from swarm_config import (
     AGENT_PORTS, DB_PATH, LOGS_DIR, ORCHESTRATOR_PORT, POLL_INTERVAL,
     TASKS_PROC, TASKS_QUEUE, MAX_RETRIES, HEARTBEAT_MISS, LOCK_STALE_SEC, LOCKS_DIR,
+    PARALLEL_SESSIONS_ENABLED, MAX_SESSIONS,
 )
 from setup_db import init_db, get_connection
+# Session manager is optional — only loaded when parallel sessions are enabled.
+session_manager = None  # type: ignore[assignment]
+if PARALLEL_SESSIONS_ENABLED:
+    from session_manager import SessionManager
+    session_manager = SessionManager(max_sessions=MAX_SESSIONS)
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -33,7 +39,7 @@ logging.basicConfig(
     format="%(asctime)s [orchestrator] %(levelname)s %(message)s",
     handlers=[
         logging.FileHandler(LOGS_DIR / "orchestrator.log", encoding="utf-8"),
-        logging.StreamHandler(sys.stdout),
+        logging.StreamHandler(sys.stderr),
     ],
 )
 log = logging.getLogger("orchestrator")
@@ -72,7 +78,20 @@ def status():
         tasks = [dict(r) for r in conn.execute(
             "SELECT * FROM tasks ORDER BY created_at DESC LIMIT 20"
         ).fetchall()]
-    return {"agents": agents, "recent_tasks": tasks}
+    sessions_summary = None
+    if session_manager is not None:
+        all_sess = session_manager.list_sessions()
+        sessions_summary = {
+            "total":     len(all_sess),
+            "active":    sum(1 for s in all_sess if s["status"] == "active"),
+            "queued":    sum(1 for s in all_sess if s["status"] == "queued"),
+            "done":      sum(1 for s in all_sess if s["status"] == "done"),
+            "failed":    sum(1 for s in all_sess if s["status"] == "failed"),
+            "max":       MAX_SESSIONS,
+            "sessions":  all_sess,
+        }
+    return {"agents": agents, "recent_tasks": tasks, "sessions": sessions_summary,
+            "parallel_enabled": PARALLEL_SESSIONS_ENABLED}
 
 
 @app.post("/heartbeat")
@@ -107,6 +126,12 @@ def task_result(payload: dict):
     log.info(f"Task {task_id} completed by {agent}: success={success}")
     if task_id is None:
         return {"ok": False}
+    # Notify SessionManager so it can update / promote queued sessions.
+    if session_manager is not None:
+        try:
+            session_manager.mark_session_done(int(task_id), success, str(result))
+        except Exception as e:
+            log.warning(f"session_manager.mark_session_done failed: {e}")
     try:
         with get_connection() as conn:
             conn.execute(
@@ -130,6 +155,69 @@ def task_result(payload: dict):
     except Exception as e:
         log.error(f"task_result DB error: {e}")
     return {"ok": True}
+
+
+# ── Parallel sessions (gated by PARALLEL_SESSIONS_ENABLED) ────────────────────
+
+def _sm_required():
+    if session_manager is None:
+        return {"ok": False,
+                "error": "parallel sessions disabled — set SWARM_PARALLEL_SESSIONS=1 and restart"}
+    return None
+
+
+@app.post("/route")
+def route_prompt(payload: dict):
+    """Main entry for parallel-session routing. Body: {prompt, project_path?, target_agent?}"""
+    err = _sm_required()
+    if err:
+        return err
+    prompt = (payload or {}).get("prompt", "").strip()
+    if not prompt:
+        return {"ok": False, "error": "prompt is required"}
+    return session_manager.route_prompt(
+        prompt=prompt,
+        project_path=payload.get("project_path", ""),
+        target_agent=payload.get("target_agent", "planner"),
+    )
+
+
+@app.get("/sessions")
+def list_sessions():
+    err = _sm_required()
+    if err:
+        return err
+    return {"ok": True, "sessions": session_manager.list_sessions()}
+
+
+@app.get("/sessions/{session_id}")
+def get_session(session_id: str):
+    err = _sm_required()
+    if err:
+        return err
+    s = session_manager.get_session(session_id)
+    if not s:
+        return {"ok": False, "error": "not found"}
+    return {"ok": True, "session": s}
+
+
+@app.post("/sessions/{session_id}/amend")
+def amend_session(session_id: str, payload: dict):
+    err = _sm_required()
+    if err:
+        return err
+    text = (payload or {}).get("text", "").strip()
+    if not text:
+        return {"ok": False, "error": "text is required"}
+    return session_manager.amend_session(session_id, text)
+
+
+@app.delete("/sessions/{session_id}")
+def cancel_session(session_id: str):
+    err = _sm_required()
+    if err:
+        return err
+    return session_manager.cancel_session(session_id)
 
 
 # ── Git rollback ──────────────────────────────────────────────────────────────
@@ -264,6 +352,14 @@ def _dispatch_task(task_file: Path) -> None:
         return
 
     log.info(f"Dispatching task {task_id} → {agent}: {desc[:60]}")
+
+    # Attach session linkage if this task came from the SessionManager.
+    sid = data.get("session_id")
+    if sid and session_manager is not None:
+        try:
+            session_manager.attach_task(sid, task_id, agent)
+        except Exception as e:
+            log.warning(f"attach_task failed: {e}")
 
     port = AGENT_PORTS.get(agent)
     if not port:

@@ -118,7 +118,7 @@ export const layer = Layer.effect(
               }),
               user,
             ),
-            mode: "primary",
+            mode: "subagent",
             native: true,
           },
           plan: {
@@ -141,7 +141,7 @@ export const layer = Layer.effect(
               }),
               user,
             ),
-            mode: "primary",
+            mode: "subagent",
             native: true,
           },
           general: {

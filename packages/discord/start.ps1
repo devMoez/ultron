@@ -7,7 +7,7 @@ Write-Host "  Starting..." -ForegroundColor Green
 Write-Host ""
 
 Push-Location $Root
-bun run --env-file .env src/index.ts
+node --import tsx src/index.ts
 $code = $LASTEXITCODE
 Pop-Location
 

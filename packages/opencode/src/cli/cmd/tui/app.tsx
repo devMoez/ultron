@@ -567,6 +567,61 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       category: "Provider",
     },
+    {
+      title: "Open Ultron UI",
+      value: "ultron.open",
+      suggested: true,
+      slash: {
+        name: "ultron",
+        aliases: ["ui", "web"],
+      },
+      onSelect: async () => {
+        // Check if server is already running
+        let serverRunning = false
+        try {
+          const res = await fetch("http://127.0.0.1:4096/", { method: "HEAD" })
+          serverRunning = res.ok
+        } catch {}
+
+        if (!serverRunning) {
+          // Start ultron server with retry
+          const ultronPath = "C:\\Users\\moezf\\.bun\\bin\\ultron.exe"
+          const isWin = process.platform === "win32"
+          const startServer = async () => {
+            if (isWin) {
+              Bun.spawn(["powershell", "-Command", `Start-Process -FilePath '${ultronPath}' -ArgumentList 'serve','--port=4096' -PassThru | Select-Object -ExpandProperty Id`])
+              await new Promise((r) => setTimeout(r, 5000))
+            } else {
+              Bun.spawn(["ultron", "serve", "--port=4096"])
+              await new Promise((r) => setTimeout(r, 3000))
+            }
+          }
+          await startServer()
+          // Verify server started - extended retry
+          for (let i = 0; i < 10; i++) {
+            try {
+              const res = await fetch("http://127.0.0.1:4096/", { method: "HEAD" })
+              if (res.ok) break
+            } catch {}
+            await new Promise((r) => setTimeout(r, 1000))
+          }
+        }
+
+        // Open in browser
+        if (typeof globalThis.open === "function") {
+          globalThis.open("http://127.0.0.1:4096", "_blank")
+        } else {
+          const isWin = process.platform === "win32"
+          if (isWin) {
+            Bun.spawn(["powershell", "-Command", "Start-Process chrome -ArgumentList 'http://127.0.0.1:4096'"])
+          } else {
+            Bun.spawn(["open", "http://127.0.0.1:4096"])
+          }
+        }
+        dialog.clear()
+      },
+      category: "System",
+    },
     ...(sync.data.console_state.switchableOrgCount > 1
       ? [
           {

@@ -14,7 +14,7 @@ def boot() -> dict:
     results = {}
     started_at = time.time()
     log.info("=" * 50)
-    log.info("ULTRON MASTER SYSTEM - BOOTING")
+    log.info("ULTRON TRACKER SYSTEM - BOOTING")
     log.info("=" * 50)
 
     # Phase 1 — State

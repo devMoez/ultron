@@ -1,5 +1,5 @@
 """
-Ultron Master System — Main Entry Point
+Ultron Tracker System — Main Entry Point
 Runs the full boot sequence then starts the dashboard.
 """
 import sys
@@ -18,14 +18,14 @@ log = get_logger("main")
 
 
 def main():
-    log.info("Ultron Master System starting...")
+    log.info("Ultron Tracker System starting...")
 
     # Run full boot sequence (phases 1-12)
     results = boot()
 
     # Print boot report
     print("\n" + "=" * 50)
-    print("  ULTRON MASTER - BOOT REPORT")
+    print("  ULTRON TRACKER - BOOT REPORT")
     print("=" * 50)
     for phase, status in results.items():
         icon = "OK" if status.startswith("ok") else "!!"

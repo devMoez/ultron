@@ -32,17 +32,38 @@
   },
 
   "mcp": {
+    // Browser automation (Playwright) – globally installed
     "browser": {
       "type": "local",
-      "command": ["npx", "@playwright/mcp@latest", "--headless"]
+      "command": ["C:/Users/moezf/AppData/Roaming/npm/playwright-mcp.cmd", "--headless"]
     },
+    // Desktop control – globally installed cmd wrapper
     "desktop": {
       "type": "local",
-      "command": ["python3", "C:/Users/moezf/Desktop/opencode/.opencode/mcp/desktop.py"]
+      "command": ["C:/Users/moezf/AppData/Roaming/npm/desktop-commander.cmd"]
     },
+    // File system access – globally installed cmd wrapper
+    "filesystem": {
+      "type": "local",
+      "command": ["C:/Users/moezf/AppData/Roaming/npm/mcp-server-filesystem.cmd", "C:/Users/moezf/Desktop"]
+    },
+    // Persistent memory – globally installed cmd wrapper
+    "memory": {
+      "type": "local",
+      "command": ["C:/Users/moezf/AppData/Roaming/npm/mcp-server-memory.cmd"]
+    },
+    // Ultron Swarm – multi-agent task routing
+    "swarm": {
+      "type": "local",
+      "command": [
+        "C:/Users/moezf/Desktop/opencode/swarm/venv/Scripts/python.exe",
+        "C:/Users/moezf/Desktop/opencode/swarm/mcp_server.py"
+      ]
+    },
+    // TaskSync – pause and ask Moez when stuck
     "tasksync": {
       "type": "local",
-      "command": ["python3", "C:/Users/moezf/Desktop/opencode/.opencode/mcp/tasksync.py"]
+      "command": ["C:/Users/moezf/AppData/Local/Python/bin/python3.exe", "C:/Users/moezf/Desktop/opencode/.opencode/mcp/tasksync.py"]
     }
   },
 

@@ -1,0 +1,7 @@
+{
+  "target_agent": "builder",
+  "description": "Run a simple test: echo \"hello swarm\" using bash",
+  "project_path": "",
+  "submitted_at": 1777077964.9956222,
+  "source": "ultron-mcp"
+}

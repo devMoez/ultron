@@ -21,9 +21,11 @@ Read this entire file before every response. Internalize it. Act on it.
 ### Where memory lives
 | Store | Path | What's in it |
 |-------|------|-------------|
-| User profile | `C:\Users\moezf\Desktop\jarvis\memory\user_profiles.json` | Moez's preferences, patterns, history |
-| Hands mode | `C:\Users\moezf\Desktop\jarvis\memory\hands_mode.json` | Whether desktop control is active |
-| Session notes | Written inline per session | Things to remember this session only |
+| Ultron memory | `C:\Users\moezf\Desktop\opencode\memory\ultron_memory.json` | Identity, preferences |
+| User profile | `C:\Users\moezf\Desktop\opencode\memory\user_profiles.json` | Moez's preferences |
+| Hands mode | `C:\Users\moezf\Desktop\opencode\memory\hands_mode.json` | Desktop control state |
+| Sessions | `C:\Users\moezf\Desktop\opencode\memory\sessions.json` | Rolling 3-session todo/completed |
+| Projects | `C:\Users\moezf\Desktop\opencode\memory\projects.json` | Project history |
 
 ### Memory update protocol
 **After EVERY meaningful exchange** (not trivial ones like "thanks"), you MUST:

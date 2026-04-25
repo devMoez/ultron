@@ -1,4 +1,4 @@
-"""Phase 9 — Ultron Master Dashboard (FastAPI, port 5010)."""
+"""Phase 9 — Ultron Tracker Dashboard (FastAPI, port 5010)."""
 import asyncio
 import json
 import time
@@ -33,7 +33,7 @@ AGENT_PORTS = {
     "verifier":     5004,
 }
 
-app = FastAPI(title="Ultron Master Dashboard")
+app = FastAPI(title="Ultron Tracker Dashboard")
 
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -46,10 +46,26 @@ _proc_cache: dict[int, psutil.Process] = {}
 
 
 def _proc_by_port(port: int):
-    """Find the psutil.Process listening on the given port."""
+    """Find the psutil.Process listening on the given port.
+
+    Falls back to scanning all processes' connections if the fast path
+    (psutil.net_connections) raises AccessDenied on Windows.
+    """
+    # Fast path: system-wide connections (needs admin on some Windows builds)
+    try:
+        for c in psutil.net_connections(kind="inet"):
+            if c.laddr.port == port and c.status in ("LISTEN", "ESTABLISHED", ""):
+                if c.pid:
+                    try:
+                        return psutil.Process(c.pid)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+    except (psutil.AccessDenied, AttributeError):
+        pass
+
+    # Slow path: iterate every process
     for proc in psutil.process_iter(["pid", "name"]):
         try:
-            # psutil 5.x: proc.connections(), 6.x: proc.net_connections()
             try:
                 conns = proc.net_connections(kind="inet")
             except AttributeError:
@@ -121,17 +137,29 @@ async def build_payload() -> dict:
             None,
         )
 
+        # Trust swarm API alive flag if the orchestrator is reachable;
+        # fall back to port detection only when swarm itself is offline.
+        swarm_alive = swarm_info.get("alive")
+        if swarm_alive is None:
+            # orchestrator unreachable — trust proc detection
+            swarm_alive = proc["status"] not in ("offline",)
+        proc_ok = proc["status"] not in ("offline",)
+
+        # If swarm says alive but proc detection missed, still show it up.
+        # Use swarm heartbeat data as the authoritative uptime source.
+        display_uptime = (swarm_info.get("uptime_s") or proc["uptime_s"] or 0)
+
         agents_out[name] = {
             "port":         port,
-            # Process metrics
+            # Process metrics (best-effort; may be 0 when proc not found by port)
             "cpu":          proc["cpu"],
             "ram_mb":       proc["ram_mb"],
-            "threads":      proc["threads"],
-            "proc_status":  proc["status"],
-            "uptime_s":     proc["uptime_s"],
+            "threads":      proc["threads"] or swarm_info.get("threads", 0),
+            "proc_status":  "running" if swarm_alive else proc["status"],
+            "uptime_s":     display_uptime,
             "pid":          proc["pid"],
-            # Swarm state
-            "alive":        swarm_info.get("alive", proc["status"] not in ("offline",)),
+            # Swarm state — authoritative
+            "alive":        bool(swarm_alive),
             "missed_hb":    swarm_info.get("missed", 0),
             "restarts":     swarm_info.get("retries", 0),
             # Task context
