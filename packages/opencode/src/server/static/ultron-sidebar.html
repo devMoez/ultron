@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#1c1c1c;color:#e8e8e8;font-family:'Inter',sans-serif;font-size:14px;height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:20px;}
+
+.sidebar{width:300px;height:95vh;background:#1c1c1c;border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+
+.topnav{display:flex;align-items:center;padding:12px 14px;gap:2px;flex-shrink:0}
+.tn{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#888;cursor:pointer;transition:.15s;background:transparent;border:none}
+.tn:hover{background:#2a2a2a;color:#e8e8e8}
+.tn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tn-gap{flex:1}
+
+.tabs{display:flex;align-items:center;padding:4px 10px 8px;gap:2px;flex-shrink:0}
+.tab{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;cursor:pointer;color:#888;font-size:13px;font-weight:500;transition:.15s;position:relative;border:none;background:transparent}
+.tab:hover{background:#2a2a2a;color:#e8e8e8}
+.tab.on{background:#2e2e2e;color:#e8e8e8}
+.tab svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.tab-label{font-size:13px}
+.tab-icon-only .tab-label{display:none}
+.tab-icon-only{padding:5px 8px}
+.tab-icon-only:hover .tab-label{display:block;position:absolute;left:50%;transform:translateX(-50%);top:calc(100% + 6px);background:#333;color:#e8e8e8;font-size:11px;padding:3px 8px;border-radius:5px;white-space:nowrap;pointer-events:none;z-index:99;border:1px solid #3a3a3a}
+.tab-icon-only:hover::before{content:'';position:absolute;left:50%;transform:translateX(-50%);top:calc(100% + 1px);border:4px solid transparent;border-bottom-color:#333;z-index:100}
+
+.navlist{padding:0 8px 4px;flex-shrink:0}
+.navitem{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;cursor:pointer;color:#c8c8c8;font-size:13.5px;transition:.12s}
+.navitem:hover{background:#262626;color:#e8e8e8}
+.navitem svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;color:#888}
+.navitem span{font-size:13.5px}
+
+.div{height:1px;background:#282828;margin:4px 0}
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden}
+.scroll::-webkit-scrollbar{width:4px}
+.scroll::-webkit-scrollbar-track{background:transparent}
+.scroll::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+.scroll::-webkit-scrollbar-thumb:hover{background:#444}
+
+.sec-label{font-size:11.5px;font-weight:500;color:#666;padding:10px 18px 4px;letter-spacing:.01em}
+
+.chat-item{padding:6px 14px;font-size:13.5px;color:#aaa;cursor:pointer;border-radius:8px;margin:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:.12s;font-weight:400}
+.chat-item:hover{background:#262626;color:#e8e8e8}
+.chat-item.active{background:#2d2d2d;color:#fff;font-weight:600}
+.chat-item .date{font-size:11px;color:#555;float:right}
+
+.code-panel{padding:0 8px}
+.code-item{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;cursor:pointer;transition:.12s;font-size:13.5px;color:#aaa;margin-bottom:1px}
+.code-item:hover{background:#262626;color:#e8e8e8}
+.code-item.active{background:#2d2d2d;color:#fff}
+.code-item svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:#888;flex-shrink:0}
+.code-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+.bottom{flex-shrink:0;padding:8px}
+.update-banner{background:#252525;border:1px solid #333;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:.15s;margin-bottom:4px}
+.update-banner:hover{background:#2e2e2e}
+.update-icon{width:32px;height:32px;background:#2e2e2e;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.update-icon svg{width:16px;height:16px;stroke:#a78bfa;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.update-text{flex:1}
+.update-title{font-size:13px;font-weight:600;color:#e8e8e8}
+.update-ver{font-size:11px;color:#666}
+.update-arrow svg{width:16px;height:16px;stroke:#888;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.user-row{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;cursor:pointer;transition:.12s}
+.user-row:hover{background:#262626}
+.user-row svg{width:15px;height:15px;stroke:#888;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.user-name{flex:1;font-size:13.5px;color:#c8c8c8}
+
+#loading{position:fixed;inset:0;background:#1c1c1c;display:flex;align-items:center;justify-content:center;z-index:999}
+#loading .spinner{width:32px;height:32px;border:3px solid #333;border-top-color:#a78bfa;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.ultron-badge{background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.3);padding:2px 8px;border-radius:6px;font-size:11px;color:#c4b5fd}
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div></div>
+
+<div class="sidebar" id="app" style="display:none">
+
+  <div class="topnav">
+    <button class="tn" title="Menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    <button class="tn" title="Toggle sidebar"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></button>
+    <button class="tn" title="Search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/></svg></button>
+    <div class="tn-gap"></div>
+    <button class="tn" title="Back"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <button class="tn" title="Forward"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" id="tab-chat" onclick="switchTab('chat',this)">
+      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span class="tab-label">Chat</span>
+    </button>
+    <button class="tab tab-icon-only" id="tab-code" onclick="switchTab('code',this)">
+      <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      <span class="tab-label">Sessions</span>
+    </button>
+  </div>
+
+  <div class="navlist" id="navlist">
+    <div class="navitem" onclick="newChat()">
+      <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>New chat</span>
+    </div>
+    <div class="navitem" onclick="openApp()">
+      <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span>Open app</span>
+    </div>
+    <div class="navitem">
+      <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      <span>Artifacts <span class="ultron-badge">soon</span></span>
+    </div>
+  </div>
+
+  <div class="div" id="nav-div"></div>
+
+  <div class="scroll">
+
+    <div id="panel-chat">
+      <div class="sec-label">Pinned</div>
+      <div id="pinned-sessions"></div>
+      <div class="sec-label">Recent</div>
+      <div id="recent-sessions"></div>
+    </div>
+
+    <div id="panel-code" style="display:none">
+      <div class="code-panel">
+        <div class="sec-label" style="padding-left:4px;margin-bottom:6px;">Active Sessions</div>
+        <div id="active-sessions"></div>
+        <div style="height:12px"></div>
+        <div class="sec-label" style="padding-left:4px;margin-bottom:6px;">Quick Actions</div>
+        <div class="code-item" onclick="newChat()">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New chat
+        </div>
+        <div class="code-item" onclick="openApp()">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+          Open full app
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="bottom">
+    <div class="update-banner" onclick="openApp()">
+      <div class="update-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <div class="update-text">
+        <div class="update-title">Ultron</div>
+        <div class="update-ver">opencode-based</div>
+      </div>
+      <div class="update-arrow">
+        <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>
+    <div class="user-row" onclick="openSettings()">
+      <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span class="user-name">Moez</span>
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const BASE = window.location.origin
+let sessions = []
+let currentSession = null
+
+async function api(path, opts = {}) {
+  const res = await fetch(BASE + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    ...(opts.body ? { body: JSON.stringify(opts.body) } : {}),
+  })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+async function loadSessions() {
+  try {
+    sessions = await api('/session')
+  } catch(e) {
+    sessions = []
+  }
+  renderSessions()
+}
+
+function renderSessions() {
+  const recent = document.getElementById('recent-sessions')
+  const active = document.getElementById('active-sessions')
+  const pinned = document.getElementById('pinned-sessions')
+
+  const sorted = [...sessions].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+  const pinnedSessions = sorted.filter(s => s.pinned)
+  const recentSessions = sorted
+
+  pinned.innerHTML = pinnedSessions.length
+    ? pinnedSessions.map(s => sessionItem(s)).join('')
+    : '<div class="chat-item" style="color:#555;font-size:12px">No pinned sessions</div>'
+
+  recent.innerHTML = recentSessions.length
+    ? recentSessions.map(s => sessionItem(s)).join('')
+    : '<div class="chat-item" style="color:#555;font-size:12px">No sessions yet — start chatting!</div>'
+
+  active.innerHTML = sorted.filter(s => s.active).length
+    ? sorted.filter(s => s.active).map(s => sessionItem(s, true)).join('')
+    : '<div class="code-item" style="color:#555">No active sessions</div>'
+}
+
+function sessionItem(s, isCode = false) {
+  const title = s.title || s.messages?.[0]?.content?.slice(0, 40) || 'New chat'
+  const date = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString() : ''
+  return isCode
+    ? `<div class="code-item${s.id === currentSession ? ' active' : ''}" onclick="selectSession('${s.id}')">
+         <div class="code-dot" style="background:${s.active ? '#a78bfa' : '#444'}"></div>
+         ${escapeHtml(title)}
+       </div>`
+    : `<div class="chat-item${s.id === currentSession ? ' active' : ''}" onclick="selectSession('${s.id}')">
+         ${escapeHtml(title)}
+         ${date ? `<span class="date">${date}</span>` : ''}
+       </div>`
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div')
+  div.textContent = str
+  return div.innerHTML
+}
+
+async function newChat() {
+  try {
+    const s = await api('/session', { method: 'POST' })
+    currentSession = s.id
+    renderSessions()
+    openApp()
+  } catch(e) {
+    openApp()
+  }
+}
+
+async function selectSession(id) {
+  currentSession = id
+  renderSessions()
+  openApp()
+}
+
+function openApp() {
+  window.open(BASE + '/app', '_blank')
+}
+
+function openSettings() {
+  window.open(BASE + '/config', '_blank')
+}
+
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.remove('on')
+    t.classList.add('tab-icon-only')
+  })
+  el.classList.add('on')
+  el.classList.remove('tab-icon-only')
+
+  document.getElementById('panel-chat').style.display = name === 'chat' ? 'block' : 'none'
+  document.getElementById('panel-code').style.display = name === 'code' ? 'block' : 'none'
+  document.getElementById('navlist').style.display = name === 'chat' ? 'block' : 'none'
+  document.getElementById('nav-div').style.display = name === 'chat' ? 'block' : 'none'
+}
+
+// init
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await loadSessions()
+  } catch(e) {
+    console.warn('Could not load sessions:', e)
+  }
+  document.getElementById('loading').style.display = 'none'
+  document.getElementById('app').style.display = 'flex'
+  document.getElementById('tab-chat').classList.remove('tab-icon-only')
+})
+</script>
+</body>
+</html>
