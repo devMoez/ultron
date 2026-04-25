@@ -53,26 +53,76 @@ Common package IDs:
 - steam: Valve.Steam
 - obs: OBSProject.OBSStudio`
 
+function runAction(params: z.infer<typeof Parameters>) {
+  return Effect.tryPromise(async () => {
+    let command: string
+    const pkg = params.package ?? ""
+
+    switch (params.action) {
+      case "install":
+        if (!pkg) throw new Error("Package name required for install")
+        command = `winget install --id "${pkg}"${params.silent ? " --silent" : ""} --accept-package-agreements --accept-source-agreements`
+        break
+      case "uninstall":
+        if (!pkg) throw new Error("Package name required for uninstall")
+        command = `winget uninstall --id "${pkg}"${params.silent ? " --silent" : ""}`
+        break
+      case "list":
+        command = "winget list"
+        break
+      case "search":
+        if (!pkg) throw new Error("Search term required")
+        command = `winget search "${pkg}"`
+        break
+      case "upgrade":
+        if (!pkg) throw new Error("Package name required for upgrade")
+        command = `winget upgrade --id "${pkg}"${params.silent ? " --silent" : ""} --accept-package-agreements --accept-source-agreements`
+        break
+      case "info":
+        if (!pkg) throw new Error("Package name required for info")
+        command = `winget show --id "${pkg}"`
+        break
+      default:
+        throw new Error(`Unknown action: ${params.action}`)
+    }
+
+    try {
+      const { stdout, stderr } = await execAsync(command, { timeout: 120000 })
+      const output = (stdout + (stderr ? `\nSTDERR: ${stderr}` : "")).trim()
+      return {
+        title: `${params.action}${pkg ? `: ${pkg}` : ""}`,
+        output: output || `✓ ${params.action} completed successfully.`,
+        metadata: { action: params.action, package: pkg },
+      }
+    } catch (err) {
+      return {
+        title: `Software management error`,
+        output: `✗ Error running winget ${params.action}: ${err instanceof Error ? err.message : String(err)}\n\nMake sure winget is installed (comes with Windows 10/11). If not, get it from the Microsoft Store: "App Installer".`,
+        metadata: { action: params.action, error: String(err) },
+      }
+    }
+  })
+}
+
 export const ManageSoftwareTool = Tool.define(
   "manage_software",
   Effect.succeed({
     description: DESCRIPTION,
     parameters: Parameters,
-    execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
-      Effect.gen(function* () {
-        const platform = os.platform()
+    execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) => {
+      const platform = os.platform()
 
-        if (platform !== "win32") {
-          return {
-            title: "manage_software: Windows only",
-            output: "This tool uses winget and is only available on Windows. On Linux, use the bash tool with apt/pacman/etc. On macOS, use homebrew via the bash tool.",
-            metadata: {},
-          }
-        }
+      if (platform !== "win32") {
+        return Effect.succeed({
+          title: "manage_software: Windows only",
+          output: "This tool uses winget and is only available on Windows. On Linux, use the bash tool with apt/pacman/etc. On macOS, use homebrew via the bash tool.",
+          metadata: {},
+        })
+      }
 
-        // Ask permission for install/uninstall/upgrade as they modify the system
-        if (params.action === "install" || params.action === "uninstall" || params.action === "upgrade") {
-          yield* ctx.ask({
+      if (params.action === "install" || params.action === "uninstall" || params.action === "upgrade") {
+        return Effect.flatMap(
+          ctx.ask({
             permission: "bash",
             patterns: [`manage_software:${params.action}:${params.package}`],
             always: [],
@@ -81,57 +131,12 @@ export const ManageSoftwareTool = Tool.define(
               package: params.package,
               description: `${params.action} "${params.package}" via winget`,
             },
-          })
-        }
+          }),
+          () => runAction(params),
+        )
+      }
 
-        return yield* Effect.tryPromise(async () => {
-          let command: string
-          const pkg = params.package ?? ""
-
-          switch (params.action) {
-            case "install":
-              if (!pkg) throw new Error("Package name required for install")
-              command = `winget install --id "${pkg}"${params.silent ? " --silent" : ""} --accept-package-agreements --accept-source-agreements`
-              break
-            case "uninstall":
-              if (!pkg) throw new Error("Package name required for uninstall")
-              command = `winget uninstall --id "${pkg}"${params.silent ? " --silent" : ""}`
-              break
-            case "list":
-              command = "winget list"
-              break
-            case "search":
-              if (!pkg) throw new Error("Search term required")
-              command = `winget search "${pkg}"`
-              break
-            case "upgrade":
-              if (!pkg) throw new Error("Package name required for upgrade")
-              command = `winget upgrade --id "${pkg}"${params.silent ? " --silent" : ""} --accept-package-agreements --accept-source-agreements`
-              break
-            case "info":
-              if (!pkg) throw new Error("Package name required for info")
-              command = `winget show --id "${pkg}"`
-              break
-            default:
-              throw new Error(`Unknown action: ${params.action}`)
-          }
-
-          try {
-            const { stdout, stderr } = await execAsync(command, { timeout: 120000 })
-            const output = (stdout + (stderr ? `\nSTDERR: ${stderr}` : "")).trim()
-            return {
-              title: `${params.action}${pkg ? `: ${pkg}` : ""}`,
-              output: output || `✓ ${params.action} completed successfully.`,
-              metadata: { action: params.action, package: pkg },
-            }
-          } catch (err) {
-            return {
-              title: `Software management error`,
-              output: `✗ Error running winget ${params.action}: ${err instanceof Error ? err.message : String(err)}\n\nMake sure winget is installed (comes with Windows 10/11). If not, get it from the Microsoft Store: "App Installer".`,
-              metadata: { error: String(err) },
-            }
-          }
-        })
-      }),
+      return runAction(params)
+    },
   }),
 )

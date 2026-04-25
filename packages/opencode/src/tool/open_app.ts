@@ -54,7 +54,7 @@ export const OpenAppTool = Tool.define(
           return {
             title: `Failed to open: ${params.target}`,
             output: `✗ Could not open "${params.target}": ${err instanceof Error ? err.message : String(err)}\n\nMake sure the app is installed or the path/URL is valid.`,
-            metadata: { target: params.target, error: String(err) },
+            metadata: { target: params.target, platform, error: String(err) },
           }
         }
       }),

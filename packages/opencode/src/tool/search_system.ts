@@ -51,7 +51,6 @@ export const SearchSystemTool = Tool.define(
         let results: string[] = []
 
         if (platform === "win32") {
-          // Use PowerShell Get-ChildItem for reliable cross-drive searching
           const typeFilter =
             params.type === "file"
               ? "-File"
@@ -76,7 +75,6 @@ $results
             .map((l) => l.trim())
             .filter(Boolean)
         } else {
-          // Unix fallback: use find
           const typeFlag = params.type === "file" ? "-type f" : params.type === "folder" ? "-type d" : ""
           const { stdout } = await execAsync(
             `find "${searchRoot}" -name "${params.query}" ${typeFlag} 2>/dev/null | head -${maxResults}`,
@@ -92,7 +90,7 @@ $results
           return {
             title: `No results for: ${params.query}`,
             output: `No files or folders matching "${params.query}" found in "${searchRoot}".\n\nTry:\n- A different search pattern (e.g. use wildcards: *.pdf)\n- A different directory (e.g. "C:\\" to search the whole drive)\n- Checking spelling`,
-            metadata: { query: params.query, searchIn: searchRoot, count: 0 },
+            metadata: { query: params.query, searchIn: searchRoot, count: 0, results: [] },
           }
         }
 

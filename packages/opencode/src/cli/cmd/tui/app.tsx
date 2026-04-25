@@ -931,7 +931,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         dialog.replace(() => (
           <DialogConfirm
             title="Shutdown"
-            description="Are you sure you want to shut down the computer?"
+            message="Are you sure you want to shut down the computer?"
             onConfirm={() => {
               dialog.clear()
               try {
@@ -954,7 +954,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         dialog.replace(() => (
           <DialogConfirm
             title="Restart"
-            description="Are you sure you want to restart the computer?"
+            message="Are you sure you want to restart the computer?"
             onConfirm={() => {
               dialog.clear()
               try {

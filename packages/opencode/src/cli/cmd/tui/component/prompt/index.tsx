@@ -660,7 +660,7 @@ export function Prompt(props: PromptProps) {
     }
     if (trimmed === "/hands on" || trimmed === "/hands off") {
       const enabled = trimmed === "/hands on"
-      setHandsMode(enabled)
+      setHandsMode(() => enabled)
       void Bun.write(
         "C:/Users/moezf/Desktop/jarvis/memory/hands_mode.json",
         JSON.stringify({ enabled }, null, 2),
