@@ -122,7 +122,7 @@ export const ManageSoftwareTool = Tool.define(
 
       if (params.action === "install" || params.action === "uninstall" || params.action === "upgrade") {
         return Effect.flatMap(
-          ctx.ask({
+          Effect.orDie(ctx.ask({
             permission: "bash",
             patterns: [`manage_software:${params.action}:${params.package}`],
             always: [],
@@ -131,7 +131,7 @@ export const ManageSoftwareTool = Tool.define(
               package: params.package,
               description: `${params.action} "${params.package}" via winget`,
             },
-          }),
+          })),
           () => runAction(params),
         )
       }

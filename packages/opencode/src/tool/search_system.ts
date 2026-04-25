@@ -106,7 +106,7 @@ $results
         return {
           title: `Found ${results.length} result(s) for: ${params.query}`,
           output,
-          metadata: { query: params.query, searchIn: searchRoot, count: results.length, results },
+          metadata: { query: params.query, searchIn: searchRoot, count: results.length, results, error: undefined },
         }
       }),
   }),

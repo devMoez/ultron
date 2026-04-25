@@ -36,6 +36,32 @@ Examples:
 
 ⚠️ Shutdown, restart, hibernate, and logout are irreversible. Always confirm with the user before executing.`
 
+export const SystemPowerTool = Tool.define(
+  "system_power",
+  Effect.succeed({
+    description: DESCRIPTION,
+    parameters: Parameters,
+    execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) => {
+      if (params.action !== "lock" && params.action !== "cancel") {
+        return Effect.flatMap(
+          Effect.orDie(ctx.ask({
+            permission: "bash",
+            patterns: [`system_power:${params.action}`],
+            always: [],
+            metadata: {
+              action: params.action,
+              description: `Are you sure you want to ${params.action} the computer?`,
+            },
+          })),
+          () => runAction(params),
+        )
+      }
+
+      return runAction(params)
+    },
+  }),
+)
+
 function runAction(params: z.infer<typeof Parameters>) {
   return Effect.tryPromise(async () => {
     const platform = os.platform()
@@ -111,29 +137,3 @@ function runAction(params: z.infer<typeof Parameters>) {
     }
   })
 }
-
-export const SystemPowerTool = Tool.define(
-  "system_power",
-  Effect.succeed({
-    description: DESCRIPTION,
-    parameters: Parameters,
-    execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) => {
-      if (params.action !== "lock" && params.action !== "cancel") {
-        return Effect.flatMap(
-          ctx.ask({
-            permission: "bash",
-            patterns: [`system_power:${params.action}`],
-            always: [],
-            metadata: {
-              action: params.action,
-              description: `Are you sure you want to ${params.action} the computer?`,
-            },
-          }),
-          () => runAction(params),
-        )
-      }
-
-      return runAction(params)
-    },
-  }),
-)

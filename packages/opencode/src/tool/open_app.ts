@@ -48,7 +48,7 @@ export const OpenAppTool = Tool.define(
           return {
             title: `Opened: ${params.target}`,
             output: `✓ Successfully opened: ${params.target}`,
-            metadata: { target: params.target, platform },
+            metadata: { target: params.target, platform, error: undefined },
           }
         } catch (err) {
           return {
