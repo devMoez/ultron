@@ -50,3 +50,13 @@ memory/
 # MCP config (may contain tokens)
 .mcp/
 .mcp.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+venv/
+.venv/
