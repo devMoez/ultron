@@ -175,6 +175,20 @@ function normalizeMessages(
     return result
   }
 
+  // Strip reasoning parts from messages when the model does not support reasoning.
+  // This prevents errors like "reasoning is not supported with this model" when
+  // session history from a reasoning model is replayed against a non-reasoning model.
+  if (!model.capabilities.reasoning) {
+    msgs = msgs.map((msg) => {
+      if (msg.role === "assistant" && Array.isArray(msg.content)) {
+        const filtered = msg.content.filter((part: any) => part.type !== "reasoning")
+        if (filtered.length === msg.content.length) return msg
+        return { ...msg, content: filtered.length > 0 ? filtered : [{ type: "text", text: "" }] }
+      }
+      return msg
+    })
+  }
+
   if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
     const field = model.capabilities.interleaved.field
     return msgs.map((msg) => {

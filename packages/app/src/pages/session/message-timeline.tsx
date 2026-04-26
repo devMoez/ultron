@@ -20,6 +20,7 @@ import { getFilename } from "@opencode-ai/shared/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
+import { usePinnedStore } from "@/context/pinned-store"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLanguage } from "@/context/language"
@@ -241,6 +242,7 @@ export function MessageTimeline(props: {
   const language = useLanguage()
   const { params, sessionKey } = useSessionKey()
   const platform = usePlatform()
+  const pinned = usePinnedStore()
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const sessionID = createMemo(() => params.id)
@@ -1021,6 +1023,43 @@ export function MessageTimeline(props: {
                   </Button>
                 </div>
               </Show>
+              {/* ── Pinned messages panel ── */}
+              <Show when={sessionID() && pinned.pinnedMessages(sessionID()!).length > 0}>
+                <div
+                  classList={{
+                    "w-full px-4 md:px-5 py-2": true,
+                    "md:max-w-200 2xl:max-w-[1000px]": props.centered,
+                  }}
+                >
+                  <div class="rounded-lg border border-border-weaker-base bg-background-stronger overflow-hidden">
+                    <div class="flex items-center gap-1.5 px-3 py-2 border-b border-border-weaker-base">
+                      <span class="text-11-medium text-text-weak uppercase tracking-wider">📌 Pinned</span>
+                    </div>
+                    <div class="flex flex-col">
+                      <For each={pinned.pinnedMessages(sessionID()!)}>
+                        {(pm) => (
+                          <div class="flex items-start gap-2 px-3 py-2 border-b border-border-weaker-base last:border-b-0 hover:bg-background-base/50 group">
+                            <span class="text-10-medium text-text-weak mt-0.5 shrink-0">
+                              {pm.role === "user" ? "You" : "AI"}
+                            </span>
+                            <span class="text-12-regular text-text-strong flex-1 min-w-0 truncate">
+                              {pm.text.slice(0, 120)}{pm.text.length > 120 ? "…" : ""}
+                            </span>
+                            <button
+                              class="opacity-0 group-hover:opacity-100 text-icon-weak hover:text-icon-base text-10-medium px-1 shrink-0 transition-opacity"
+                              title="Unpin"
+                              onClick={() => pinned.unpinMessage(sessionID()!, pm.messageId)}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                </div>
+              </Show>
+
               <For each={rendered()}>
                 {(messageID) => {
                   const active = createMemo(() => activeMessageID() === messageID)
@@ -1036,12 +1075,32 @@ export function MessageTimeline(props: {
                       ),
                   })
                   const commentCount = createMemo(() => comments().length)
+                  const isPinned = createMemo(() => sessionID() ? pinned.isPinnedMessage(sessionID()!, messageID) : false)
+                  const pinMessage = () => {
+                    const sid = sessionID()
+                    if (!sid) return
+                    const parts = sync.data.part[messageID] ?? []
+                    const text = parts
+                      .filter((p: any) => p.type === "text" && !p.synthetic)
+                      .map((p: any) => p.text ?? "")
+                      .join(" ")
+                      .trim()
+                    const msgs = sync.data.message[sid] ?? []
+                    const msg = msgs.find((m) => m.id === messageID)
+                    if (!msg) return
+                    pinned.pinMessage(sid, { messageId: messageID, text: text || "(no text)", role: msg.role as "user" | "assistant" })
+                  }
+                  const unpinMessage = () => {
+                    const sid = sessionID()
+                    if (!sid) return
+                    pinned.unpinMessage(sid, messageID)
+                  }
                   return (
                     <div
                       id={props.anchor(messageID)}
                       data-message-id={messageID}
                       classList={{
-                        "min-w-0 w-full max-w-full": true,
+                        "min-w-0 w-full max-w-full group/msg relative": true,
                         "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                       }}
                       style={{
@@ -1049,6 +1108,15 @@ export function MessageTimeline(props: {
                         "contain-intrinsic-size": active() ? undefined : "auto 500px",
                       }}
                     >
+                      {/* Pin button – appears on hover */}
+                      <button
+                        title={isPinned() ? "Unpin message" : "Pin message"}
+                        onClick={() => isPinned() ? unpinMessage() : pinMessage()}
+                        class="absolute top-2 right-2 z-10 opacity-0 group-hover/msg:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center rounded text-[13px] bg-background-stronger border border-border-weaker-base hover:border-border-weak-base cursor-pointer"
+                        style={{ color: isPinned() ? "#a78bfa" : "#666" }}
+                      >
+                        📌
+                      </button>
                       <Show when={commentCount() > 0}>
                         <div class="w-full px-4 md:px-5 pb-2">
                           <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">

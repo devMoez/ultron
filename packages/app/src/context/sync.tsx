@@ -428,6 +428,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           })
         },
         async sync(sessionID: string, opts?: { force?: boolean }) {
+          if (sessionID?.startsWith("__tab_")) return
           const directory = sdk.directory
           const client = sdk.client
           const [store, setStore] = globalSync.child(directory)
@@ -500,6 +501,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           })
         },
         async diff(sessionID: string, opts?: { force?: boolean }) {
+          if (sessionID?.startsWith("__tab_")) return
           const directory = sdk.directory
           const client = sdk.client
           const [store, setStore] = globalSync.child(directory)
@@ -515,6 +517,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           )
         },
         async todo(sessionID: string, opts?: { force?: boolean }) {
+          if (sessionID?.startsWith("__tab_")) return
           const directory = sdk.directory
           const client = sdk.client
           const [store, setStore] = globalSync.child(directory)

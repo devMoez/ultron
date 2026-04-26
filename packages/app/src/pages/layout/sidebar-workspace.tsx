@@ -242,7 +242,13 @@ const WorkspaceSessionList = (props: {
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
   language: ReturnType<typeof useLanguage>
-}): JSX.Element => (
+  filterSession?: (id: string) => boolean
+}): JSX.Element => {
+  const visible = () => {
+    const all = props.sessions()
+    return props.filterSession ? all.filter((s) => props.filterSession!(s.id)) : all
+  }
+  return (
   <nav class="flex flex-col gap-1">
     <Show when={props.showNew()}>
       <NewSessionItem
@@ -255,7 +261,7 @@ const WorkspaceSessionList = (props: {
     <Show when={props.loading()}>
       <SessionSkeleton />
     </Show>
-    <For each={props.sessions()}>
+    <For each={visible()}>
       {(session) => (
         <SessionItem
           session={session}
@@ -287,7 +293,8 @@ const WorkspaceSessionList = (props: {
       </div>
     </Show>
   </nav>
-)
+  )
+}
 
 export const SortableWorkspace = (props: {
   ctx: WorkspaceSidebarContext
@@ -443,6 +450,7 @@ export const LocalWorkspace = (props: {
   project: LocalProject
   sortNow: Accessor<number>
   mobile?: boolean
+  filterSession?: (id: string) => boolean
 }): JSX.Element => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
@@ -476,6 +484,7 @@ export const LocalWorkspace = (props: {
         hasMore={hasMore}
         loadMore={loadMore}
         language={language}
+        filterSession={props.filterSession}
       />
     </div>
   )

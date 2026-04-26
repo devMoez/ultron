@@ -16,12 +16,6 @@ import { GlobalRoutes } from "./routes/global"
 import { WorkspaceRouterMiddleware } from "./workspace"
 import { InstanceMiddleware } from "./routes/instance/middleware"
 import { WorkspaceRoutes } from "./routes/control/workspace"
-import { readFileSync } from "node:fs"
-
-const ULTRON_SIDEBAR_HTML = readFileSync(
-  new URL("./static/ultron-sidebar.html", import.meta.url),
-  "utf-8",
-)
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -71,7 +65,6 @@ function create(opts: { cors?: string[] }) {
           .use(WorkspaceRouterMiddleware(runtime.upgradeWebSocket)),
       )
       .route("/", InstanceRoutes(runtime.upgradeWebSocket))
-      .get("/", (c) => c.html(ULTRON_SIDEBAR_HTML))
       .route("/", UIRoutes()),
     runtime,
   }

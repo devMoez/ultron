@@ -1,6 +1,7 @@
 ---
 mode: primary
-model: cloudflare-workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast
+model: opencode/nemotron-3-super-free
+variant: medium
 color: "#44BA81"
 description: Default agent — everyday tasks, chat, installs, system control, quick answers
 ---

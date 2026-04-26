@@ -334,6 +334,7 @@ export default function Page() {
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const { params, sessionKey, tabs, view } = useSessionLayout()
+  const isTabMarker = (id: string | undefined): boolean => !!id?.startsWith("__tab_")
 
   createEffect(() => {
     if (!prompt.ready()) return
@@ -449,17 +450,17 @@ export default function Page() {
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
   const messagesReady = createMemo(() => {
     const id = params.id
-    if (!id) return true
+    if (!id || isTabMarker(id)) return true
     return sync.data.message[id] !== undefined
   })
   const historyMore = createMemo(() => {
     const id = params.id
-    if (!id) return false
+    if (!id || isTabMarker(id)) return false
     return sync.session.history.more(id)
   })
   const historyLoading = createMemo(() => {
     const id = params.id
-    if (!id) return false
+    if (!id || isTabMarker(id)) return false
     return sync.session.history.loading(id)
   })
   const userMessages = createMemo(
@@ -762,7 +763,7 @@ export default function Page() {
       if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
       refreshFrame = undefined
       refreshTimer = undefined
-      if (!id) return
+      if (!id || isTabMarker(id)) return
 
       const cached = untrack(() => sync.data.message[id] !== undefined)
       const stale = !cached
@@ -804,7 +805,7 @@ export default function Page() {
         if (todoTimer !== undefined) window.clearTimeout(todoTimer)
         todoFrame = undefined
         todoTimer = undefined
-        if (!id) return
+        if (!id || isTabMarker(id)) return
         if (status === "idle" && !blocked) return
         const cached = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
 
@@ -1258,7 +1259,7 @@ export default function Page() {
 
   createEffect(() => {
     const id = params.id
-    if (!id) return
+    if (!id || isTabMarker(id)) return
 
     if (!wantsReview()) return
     if (sync.data.session_diff[id] !== undefined) return

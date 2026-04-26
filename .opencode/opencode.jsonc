@@ -1,31 +1,53 @@
 {
   "$schema": "https://opencode.ai/config.json",
 
-  // ─────────────────────────────────────────────────────────────────
-  //  FREE MODELS (OpenCode Zen) – no API key required
-  //  Available: @cf/meta/llama-3.3-70b-instruct-fp8-fast (default),
-  //            nemotron, minimax, qwen, gemma, etc.
-  //  Switch with /model command inside OpenCode
-  // ─────────────────────────────────────────────────────────────────
-  "model": "cloudflare-workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  // Default model – OpenCode Zen (no API key required)
+  // Switch with /model command inside Ultron
+  "model": "opencode/nemotron-3-super-free",
+  "default_agent": "ultron",
 
-  // ── Only show free/Zen providers – hides all paid APIs from the model picker
+  // small_model: used for title generation
+  "small_model": "groq/llama-3.1-8b-instant",
+
+  // ── Compaction agent: uses a high-context model to summarize long sessions.
+  // google/gemini-2.0-flash-001 via OpenRouter = 1,048,576 token context (1M).
+  // This prevents "Conversation history too large to compact" on very long sessions.
+  "agent": {
+    "compaction": {
+      "model": "openrouter/google/gemini-2.0-flash-001"
+    },
+    "title": {
+      "model": "groq/llama-3.1-8b-instant"
+    }
+  },
+
+  // ── Providers: free/Zen + Groq (fast inference) + OpenRouter (1M-ctx models)
   "enabled_providers": [
-    "cloudflare-workers-ai",
-    "nemotron-3-super-free",
-    "minimax",
-    "hy3-preview-free",
-    "mimo-v2-flash-free",
-    "mimo-v2-omni-free",
-    "mimo-v2-pro-free",
-    "glm-5-free",
-    "trinity-large-preview-free",
-    "zenmux"
+    "opencode",
+    "zenmux",
+    "groq",
+    "openrouter"
   ],
 
   "provider": {
-    // Cloudflare Workers AI – free tier, no API key needed
-    "cloudflare-workers-ai": {}
+    "groq": {
+      // Fallback key chain: tries GROQ_API_KEY first, falls back to GROQ_API_KEY_2
+      "env": ["GROQ_API_KEY", "GROQ_API_KEY_2"],
+      // Pin a sane default ordering so picker shows best models first
+      "models": {
+        "openai/gpt-oss-120b":           { "status": "alpha" },
+        "openai/gpt-oss-20b":            { "status": "alpha" },
+        "openai/gpt-oss-safeguard-20b":  { "status": "alpha" },
+        "canopylabs/orpheus-v1-english":  { "status": "alpha" },
+        "canopylabs/orpheus-arabic-saudi": { "status": "alpha" },
+        "meta-llama/llama-prompt-guard-2-22m": { "status": "alpha" },
+        "meta-llama/llama-prompt-guard-2-86m": { "status": "alpha" },
+        "meta-llama/llama-guard-4-12b":   { "status": "alpha" },
+        "llama-guard-3-8b":               { "status": "alpha" },
+        "whisper-large-v3":               { "status": "alpha" },
+        "whisper-large-v3-turbo":         { "status": "alpha" }
+      }
+    }
   },
 
   "instructions": [".opencode/ULTRON_MEMORY.md"],
@@ -45,10 +67,10 @@
       "type": "local",
       "command": ["C:/Users/moezf/AppData/Roaming/npm/playwright-mcp.cmd", "--headless"]
     },
-    // Desktop control – globally installed cmd wrapper
+    // Desktop control – servo-mcp (desktop-commander dist was missing)
     "desktop": {
       "type": "local",
-      "command": ["C:/Users/moezf/AppData/Roaming/npm/desktop-commander.cmd"]
+      "command": ["C:/Users/moezf/AppData/Roaming/npm/servo-mcp.cmd"]
     },
     // File system access – globally installed cmd wrapper
     "filesystem": {

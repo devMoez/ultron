@@ -1,7 +1,9 @@
 """
 Step 4: Orchestrator – spawns all agents, watches task queue, manages health.
+Enhanced with: WebSocket real-time push, DAG, AgentRegistry, MessageBus, SkillOrchestra.
 Run via start.ps1 or: python orchestrator.py
 """
+import asyncio
 import json
 import logging
 import os
@@ -11,14 +13,21 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Set
 
 import httpx
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 
 # Make swarm root importable
 SWARM_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(SWARM_ROOT))
+
+# Always use the swarm venv Python to spawn agents (avoids sys.executable
+# resolving to a different venv when the user runs `python orchestrator.py`).
+_VENV_PYTHON = SWARM_ROOT / "venv" / "Scripts" / "python.exe"
+AGENT_PYTHON = str(_VENV_PYTHON) if _VENV_PYTHON.exists() else sys.executable
 
 from swarm_config import (
     AGENT_PORTS, DB_PATH, LOGS_DIR, ORCHESTRATOR_PORT, POLL_INTERVAL,
@@ -32,6 +41,22 @@ if PARALLEL_SESSIONS_ENABLED:
     from session_manager import SessionManager
     session_manager = SessionManager(max_sessions=MAX_SESSIONS)
 
+# ── Swarm Core (new modules — safe to import, no side effects) ────────────────
+try:
+    from core.dag import shared_dag
+    from core.agent_registry import shared_registry
+    from core.message_bus import shared_bus
+    from core.skill_orchestra import SkillOrchestra
+    _CORE_LOADED = True
+except Exception as _e:
+    log_boot = logging.getLogger("orchestrator")
+    log_boot.warning(f"Swarm core modules not loaded: {_e}")
+    shared_dag = None  # type: ignore
+    shared_registry = None  # type: ignore
+    shared_bus = None  # type: ignore
+    SkillOrchestra = None  # type: ignore
+    _CORE_LOADED = False
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
@@ -43,6 +68,15 @@ logging.basicConfig(
     ],
 )
 log = logging.getLogger("orchestrator")
+
+# ── Agent skill map (used by registry auto-register on heartbeat) ─────────────
+_AGENT_SKILLS: dict[str, list[str]] = {
+    "planner":  ["plan", "decompose"],
+    "designer": ["design", "ui", "css"],
+    "builder":  ["code", "build", "spawn_agent"],
+    "debugger": ["debug", "test"],
+    "verifier": ["verify", "test"],
+}
 
 # ── Agent process tracking ────────────────────────────────────────────────────
 agent_processes: dict[str, subprocess.Popen] = {}
@@ -58,6 +92,47 @@ AGENT_SCRIPTS = {
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 app = FastAPI(title="Ultron Swarm Orchestrator")
+
+# Allow the Ultron web UI (any localhost port) to poll the orchestrator
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── WebSocket connection manager ──────────────────────────────────────────────
+class _WSManager:
+    def __init__(self):
+        self._clients: Set[WebSocket] = set()
+        self._lock = threading.Lock()
+
+    async def connect(self, ws: WebSocket):
+        await ws.accept()
+        with self._lock:
+            self._clients.add(ws)
+
+    def disconnect(self, ws: WebSocket):
+        with self._lock:
+            self._clients.discard(ws)
+
+    def broadcast_sync(self, data: dict):
+        """Call from non-async thread to push update to all WS clients."""
+        payload = json.dumps(data)
+        dead = []
+        with self._lock:
+            clients = list(self._clients)
+        for ws in clients:
+            try:
+                loop = ws.send_text.__self__._loop  # type: ignore
+                asyncio.run_coroutine_threadsafe(ws.send_text(payload), loop)
+            except Exception:
+                dead.append(ws)
+        for d in dead:
+            self.disconnect(d)
+
+ws_manager = _WSManager()
+_ws_loop: asyncio.AbstractEventLoop | None = None   # set when uvicorn starts
 
 
 @app.get("/status")
@@ -94,6 +169,27 @@ def status():
             "parallel_enabled": PARALLEL_SESSIONS_ENABLED}
 
 
+@app.post("/submit")
+def submit_task(payload: dict):
+    """Submit a task from the UI: {description, target_agent?, project_path?}"""
+    description = (payload or {}).get("description", "").strip()
+    if not description:
+        return {"ok": False, "error": "description is required"}
+    target_agent = payload.get("target_agent", "planner")
+    project_path = payload.get("project_path", "")
+    # Write to task queue as a JSON file
+    import uuid, time as _time
+    task_id = str(uuid.uuid4())[:8]
+    task_file = TASKS_QUEUE / f"{_time.time():.6f}_{task_id}.json"
+    TASKS_QUEUE.mkdir(parents=True, exist_ok=True)
+    task_file.write_text(
+        json.dumps({"description": description, "target_agent": target_agent, "project_path": project_path}),
+        encoding="utf-8",
+    )
+    log.info(f"UI submitted task [{task_id}] → {target_agent}: {description[:60]}")
+    return {"ok": True, "task_id": task_id}
+
+
 @app.post("/heartbeat")
 def heartbeat(payload: dict):
     name = payload.get("agent")
@@ -114,6 +210,18 @@ def heartbeat(payload: dict):
             )
     except Exception as e:
         log.warning(f"DB heartbeat update failed: {e}")
+    # Update shared registry
+    if shared_registry and _CORE_LOADED:
+        # Register if not already known (happens when orchestrator restarts)
+        if not shared_registry.get(name):
+            from swarm_config import AGENT_PORTS as _AP
+            port = payload.get("port") or _AP.get(name, 0)
+            shared_registry.register(name, _AGENT_SKILLS.get(name, []), port)
+        shared_registry.heartbeat(
+            name,
+            status=payload.get("status", "idle"),
+            pid=payload.get("pid"),
+        )
     return {"ok": True}
 
 
@@ -155,6 +263,226 @@ def task_result(payload: dict):
     except Exception as e:
         log.error(f"task_result DB error: {e}")
     return {"ok": True}
+
+
+# ── WebSocket real-time push ──────────────────────────────────────────────────
+
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket):
+    global _ws_loop
+    _ws_loop = asyncio.get_event_loop()
+    await ws_manager.connect(ws)
+    try:
+        # Send initial snapshot
+        await ws.send_text(json.dumps({"type": "init", "data": _build_snapshot()}))
+        while True:
+            # Keep alive — client pings with "ping"
+            msg = await ws.receive_text()
+            if msg == "ping":
+                await ws.send_text(json.dumps({"type": "pong"}))
+    except WebSocketDisconnect:
+        ws_manager.disconnect(ws)
+
+
+def _build_snapshot() -> dict:
+    """Full status snapshot for initial WS push or polling."""
+    agents_proc = {}
+    with _lock:
+        for name, proc in agent_processes.items():
+            alive = proc.poll() is None
+            agents_proc[name] = {
+                "port":    AGENT_PORTS[name],
+                "alive":   alive,
+                "pid":     proc.pid if alive else None,
+                "last_hb": agent_last_heartbeat.get(name),
+                "missed":  agent_missed.get(name, 0),
+                "retries": agent_retries.get(name, 0),
+            }
+    # Merge registry info (skills, status)
+    if shared_registry and _CORE_LOADED:
+        for reg_agent in shared_registry.all_agents():
+            n = reg_agent["name"]
+            if n in agents_proc:
+                agents_proc[n].update({
+                    "skills": reg_agent["skills"],
+                    "status": reg_agent["status"],
+                    "current_task": reg_agent["current_task"],
+                    "spawned": reg_agent["spawned"],
+                })
+            else:
+                agents_proc[n] = reg_agent
+    with get_connection() as conn:
+        tasks = [dict(r) for r in conn.execute(
+            "SELECT * FROM tasks ORDER BY created_at DESC LIMIT 40"
+        ).fetchall()]
+    dag_nodes = shared_dag.get_all() if shared_dag else []
+    dag_edges = shared_dag.get_edges() if shared_dag else []
+    bus_log   = shared_bus.get_log() if shared_bus else []
+    return {
+        "agents":    agents_proc,
+        "tasks":     tasks,
+        "dag":       {"nodes": dag_nodes, "edges": dag_edges},
+        "bus_log":   bus_log[-50:],
+    }
+
+
+def _push_update(event_type: str, data: dict):
+    """Push incremental update to all WS clients (call from any thread)."""
+    if not _ws_loop:
+        return
+    payload = json.dumps({"type": event_type, **data})
+    with ws_manager._lock:
+        clients = list(ws_manager._clients)
+    for ws in clients:
+        try:
+            asyncio.run_coroutine_threadsafe(ws.send_text(payload), _ws_loop)
+        except Exception:
+            pass
+
+
+# ── Agent control (spawn / kill / pause / resume / assign) ───────────────────
+
+@app.post("/agents/spawn")
+def spawn_agent_endpoint(payload: dict):
+    """Spawn a new agent process. Body: {name?, skills: [str], port?}"""
+    skills = (payload or {}).get("skills", [])
+    name   = (payload or {}).get("name", f"agent_{int(time.time())}")
+    if not skills:
+        return {"ok": False, "error": "skills list required"}
+    if shared_registry and _CORE_LOADED:
+        shared_registry.register(name, skills, port=0, spawned=True)
+    _push_update("agent_spawned", {"name": name, "skills": skills})
+    log.info(f"UI spawned agent: {name!r} skills={skills}")
+    return {"ok": True, "name": name, "skills": skills}
+
+
+@app.post("/agents/{name}/kill")
+def kill_agent(name: str):
+    """Kill (terminate) a running agent process."""
+    with _lock:
+        proc = agent_processes.get(name)
+    if not proc:
+        return {"ok": False, "error": f"Agent {name!r} not found"}
+    try:
+        proc.kill()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    if shared_registry and _CORE_LOADED:
+        shared_registry.unregister(name)
+    _push_update("agent_killed", {"name": name})
+    log.info(f"Agent {name!r} killed by UI")
+    return {"ok": True}
+
+
+@app.post("/agents/{name}/pause")
+def pause_agent(name: str):
+    if shared_registry and _CORE_LOADED:
+        ok = shared_registry.pause(name)
+        _push_update("agent_paused", {"name": name})
+        return {"ok": ok}
+    return {"ok": False, "error": "registry not loaded"}
+
+
+@app.post("/agents/{name}/resume")
+def resume_agent(name: str):
+    if shared_registry and _CORE_LOADED:
+        ok = shared_registry.resume(name)
+        _push_update("agent_resumed", {"name": name})
+        return {"ok": ok}
+    return {"ok": False, "error": "registry not loaded"}
+
+
+@app.post("/agents/{name}/assign")
+def assign_task_to_agent(name: str, payload: dict):
+    """Manually assign a task to a specific agent, bypassing skill routing."""
+    description = (payload or {}).get("description", "").strip()
+    if not description:
+        return {"ok": False, "error": "description required"}
+    import uuid as _uuid, time as _t
+    task_id = _uuid.uuid4().hex[:8]
+    task_file = TASKS_QUEUE / f"{_t.time():.6f}_{task_id}.json"
+    TASKS_QUEUE.mkdir(parents=True, exist_ok=True)
+    task_file.write_text(json.dumps({
+        "description": description,
+        "target_agent": name,
+        "project_path": payload.get("project_path", ""),
+    }), encoding="utf-8")
+    log.info(f"UI manually assigned task [{task_id}] to {name!r}: {description[:60]}")
+    return {"ok": True, "task_id": task_id}
+
+
+# ── DAG endpoints ─────────────────────────────────────────────────────────────
+
+@app.get("/dag")
+def get_dag():
+    if not shared_dag or not _CORE_LOADED:
+        return {"ok": False, "error": "DAG not loaded"}
+    return {
+        "ok":    True,
+        "nodes": shared_dag.get_all(),
+        "edges": shared_dag.get_edges(),
+    }
+
+
+@app.post("/dag/submit")
+def submit_dag_task(payload: dict):
+    """Add a task directly to the DAG (skill-routed). Body: {description, skills: [str]}"""
+    if not shared_dag or not _CORE_LOADED:
+        return {"ok": False, "error": "DAG not loaded"}
+    desc   = (payload or {}).get("description", "").strip()
+    skills = (payload or {}).get("skills", ["plan"])
+    if not desc:
+        return {"ok": False, "error": "description required"}
+    task = shared_dag.add_task(desc, skills)
+    _push_update("dag_task_added", {"task": task.to_dict()})
+    return {"ok": True, "task_id": task.id}
+
+
+@app.get("/dag/events")
+def dag_events(since: float = 0.0):
+    if not shared_dag or not _CORE_LOADED:
+        return {"events": []}
+    return {"events": shared_dag.get_events(since)}
+
+
+# ── Bus log ───────────────────────────────────────────────────────────────────
+
+@app.get("/bus/log")
+def bus_log(since: float = 0.0, limit: int = 100):
+    if not shared_bus or not _CORE_LOADED:
+        return {"log": []}
+    return {"log": shared_bus.get_log(since=since, limit=limit)}
+
+
+# ── Registry ──────────────────────────────────────────────────────────────────
+
+@app.get("/registry")
+def registry_agents():
+    if not shared_registry or not _CORE_LOADED:
+        return {"agents": []}
+    return {"agents": shared_registry.all_agents()}
+
+
+@app.post("/registry/register")
+def registry_register(payload: dict):
+    """Agents call this to self-register with skills."""
+    name   = (payload or {}).get("name", "")
+    skills = (payload or {}).get("skills", [])
+    port   = (payload or {}).get("port", 0)
+    if not name or not skills:
+        return {"ok": False, "error": "name and skills required"}
+    if shared_registry and _CORE_LOADED:
+        shared_registry.register(name, skills, port)
+        _push_update("agent_registered", {"name": name, "skills": skills})
+    return {"ok": True}
+
+
+# ── Snapshot (replaces polling /status) ──────────────────────────────────────
+
+@app.get("/snapshot")
+def snapshot():
+    """Full state snapshot — used by SwarmPanel fallback polling."""
+    return _build_snapshot()
 
 
 # ── Parallel sessions (gated by PARALLEL_SESSIONS_ENABLED) ────────────────────
@@ -244,7 +572,7 @@ def _spawn_agent(name: str) -> subprocess.Popen:
     log_file = open(LOGS_DIR / f"{name}.log", "a", encoding="utf-8")
     env = {**os.environ, "ORCHESTRATOR_URL": f"http://127.0.0.1:{ORCHESTRATOR_PORT}"}
     proc = subprocess.Popen(
-        [sys.executable, str(script)],
+        [AGENT_PYTHON, str(script)],
         stdout=log_file,
         stderr=log_file,
         env=env,
@@ -402,6 +730,31 @@ if __name__ == "__main__":
     log.info("Starting all agents...")
     _start_all_agents()
     time.sleep(2)  # give agents a moment to boot
+
+    # Pre-register known agents in the registry so they show up immediately
+    if shared_registry and _CORE_LOADED:
+        for aname, aport in AGENT_PORTS.items():
+            shared_registry.register(aname, _AGENT_SKILLS.get(aname, []), aport)
+        log.info("Agent registry populated")
+
+    # Start SkillOrchestra (skill-based DAG routing, parallel dispatch)
+    if _CORE_LOADED and SkillOrchestra:
+        def _spawn_skill(skill: str):
+            """Called by SkillOrchestra when a skill is missing."""
+            import uuid as _uuid
+            name = f"{skill}_agent_{_uuid.uuid4().hex[:4]}"
+            shared_registry.register(name, [skill], port=0, spawned=True)
+            log.info(f"SkillOrchestra spawned virtual agent {name!r} for skill {skill!r}")
+
+        orchestra = SkillOrchestra(
+            dag=shared_dag,
+            registry=shared_registry,
+            bus=shared_bus,
+            spawn_skill_fn=_spawn_skill,
+            poll_interval=2.0,
+        )
+        orchestra.start()
+        log.info("SkillOrchestra started")
 
     log.info("Starting health monitor...")
     threading.Thread(target=_health_monitor, daemon=True, name="health").start()

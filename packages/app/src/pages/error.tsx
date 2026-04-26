@@ -297,14 +297,14 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
         </Show>
         <div class="flex flex-col items-center gap-2">
           <div class="flex items-center justify-center gap-1">
-            {language.t("error.page.report.prefix")}
+            Report this error on
             <button
               type="button"
-              class="flex items-center text-text-interactive-base gap-1"
-              onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+              class="flex items-center text-text-interactive-base gap-1 font-semibold underline underline-offset-2"
+              onClick={() => platform.openLink("https://github.com/devMoez/ultron/issues/new?template=bug_report.md")}
             >
-              <div>{language.t("error.page.report.discord")}</div>
-              <Icon name="discord" class="text-text-interactive-base" />
+              GitHub
+              <Icon name="square-arrow-top-right" class="text-text-interactive-base" />
             </button>
           </div>
           <Show when={platform.version}>

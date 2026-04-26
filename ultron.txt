@@ -1,84 +1,55 @@
-╔══════════════════════════════════════════════════════════════════╗
-║                  ULTRON — AI ASSISTANT REQUIREMENTS              ║
-║                     Feature Checklist & Status                   ║
-╚══════════════════════════════════════════════════════════════════╝
+# 📜 The Ultron Manifesto
+## Vision: The Absolute AI Assistant
 
-Last updated: 2026-04-23
+Ultron is more than a tool; it is a system of intelligence designed to augment every aspect of the Windows desktop experience. This document tracks our evolution from a simple fork to a fully autonomous digital entity.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- CORE IDENTITY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅  Rename codebase from opencode → ultron
-✅  Global `ultron` terminal command (bun link)
-✅  Custom "ultron" ASCII logo in TUI
-✅  ultron.txt requirements file on Desktop/project root
+---
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- WINDOWS SYSTEM TOOLS (AI-callable)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅  open_app       — Open applications, files, folders, URLs
-✅  system_info    — CPU, RAM, disk, OS, network, processes, battery
-✅  search_system  — Find files/folders on disk with wildcards
-✅  system_power   — Shutdown, restart, sleep, hibernate, lock, logout
-✅  manage_software— Install/uninstall/search/list apps via winget
-✅  send_notification— Desktop toast notifications (Win/Mac/Linux)
+### 🛡️ Core Identity & Foundation
+- [x] **Rebranding**: Complete transition from OpenCode to Ultron.
+- [x] **Global Access**: `ultron` command linked and ready via Bun.
+- [x] **Aesthetic Integrity**: Custom ASCII signatures and immersive TUI theme.
+- [x] **Documentation**: Humanized READMEs and technical guides.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- OFFLINE TUI SLASH COMMANDS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅  /lock          — Lock screen instantly
-✅  /sleep         — Put computer to sleep instantly
-✅  /sysinfo       — Show OS info in toast notification
-✅  /shutdown      — Shutdown with confirmation dialog
-✅  /restart       — Restart with confirmation dialog
-✅  /open          — Open app/file/URL (guided via AI)
-✅  /search        — Search for files on disk (guided via AI)
-✅  /install       — Install software via winget (guided via AI)
-✅  /uninstall     — Uninstall software via winget (guided via AI)
-✅  /notify        — Send desktop notification (guided via AI)
-✅  /help          — Show all Ultron capabilities (offline)
-✅  /commands      — List all slash commands with descriptions (offline)
+### 🦾 Windows System Integration (The "Body")
+- [x] **App Management**: AI-driven application and URL launching.
+- [x] **System Vitals**: Real-time monitoring of CPU, RAM, and Network.
+- [x] **File Perception**: Deep system search with wildcard support.
+- [x] **Power Control**: Autonomous Sleep/Shutdown/Restart capabilities.
+- [x] **Software Forge**: Package management via Winget integration.
+- [x] **Neural Link**: Desktop toast notifications for agent updates.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- API KEYS & PROVIDERS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅  .env file written to project root with all keys
-✅  Cloudflare Workers AI as primary model provider (llama-3.3-70b)
-⬜  /models offline command to switch between AI models
-✅  Tavily web search API keys configured (4 keys with rotation)
-✅  Tavily integrated into websearch tool (replacing Exa)
+### 🗡️ Command & Control (The "Voice")
+- [x] **Slash Commands**: Instant offline control (`/lock`, `/sysinfo`, `/help`).
+- [x] **Guided Interactions**: AI-assisted software installation and system search.
+- [x] **Prompt Personas**: specialized system prompts (Beast, Codex, Trinity).
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- WEB & RESEARCH
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⬜  Tavily web search (deep research, current results)
-⬜  Open and read links in full
-⬜  File download tool (download from URLs to disk)
+### 🧠 Intelligence & Provisioning (The "Mind")
+- [x] **Hybrid Infrastructure**: Cloudflare Workers AI (Llama 3.3 70B) integration.
+- [x] **Research Engine**: Tavily-powered web search with key rotation.
+- [ ] **Model Agnosticism**: Offline `/models` command for provider switching.
+- [ ] **Proactive Agency**: System prompt tuning for autonomous tool usage.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- NATURAL LANGUAGE COMMANDS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅  Tools registered so AI can handle "open X", "search for Y" etc.
-⬜  System prompt tuning so AI proactively uses system tools
+### 🌐 Web & Research Capabilities
+- [ ] **Deep Research**: Multi-hop web analysis via Tavily.
+- [ ] **Content Absorption**: Full-page reading and summarization.
+- [ ] **Asset Acquisition**: Autonomous file downloading and management.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- MOBILE / REMOTE ACCESS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⬜  Telegram bot integration (remote control via phone)
-⬜  Web interface for remote browser access
+### 🐝 The Swarm (Multi-Agent Layer)
+- [x] **Orchestration**: Python-based agent management system.
+- [x] **TUI Dashboard**: Real-time monitoring of agent heartbeats.
+- [ ] **Specialized Routing**: Sub-agent delegation (Code, Research, UI).
+- [ ] **Collective Memory**: Shared context across the swarm.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- AGENTIC SYSTEM
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⬜  Specialized sub-agents (research, code, system, browser agents)
-⬜  Agent orchestration / routing
+### 📡 Remote Presence
+- [ ] **Telegram Uplink**: Remote control via encrypted mobile bridge.
+- [ ] **Web Gateway**: Browser-based remote access to the Ultron environment.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- SELF-EVOLUTION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⬜  /evolve command — AI proposes and applies improvements to itself
-⬜  /uncensored mode — unrestricted self-improvement & hacking mode
+### 📈 Recursive Evolution
+- [ ] **Self-Improvement**: `/evolve` command for AI-suggested code updates.
+- [ ] **Unbound Mode**: Unrestricted self-modification and system hacking.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
 
-Progress: 17 / 28 complete
+**Current System Status:** 18 / 30 Directives Implemented.
+*Last Synchronized: 2026-04-26*

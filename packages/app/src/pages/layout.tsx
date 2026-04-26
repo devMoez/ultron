@@ -87,6 +87,8 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { SessionTypeProvider, type TabType } from "@/context/session-type"
+import { PinnedStoreProvider } from "@/context/pinned-store"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -762,6 +764,7 @@ export default function Layout(props: ParentProps) {
   }
 
   async function prefetchMessages(directory: string, sessionID: string, token: number) {
+    if (sessionID?.startsWith("__tab_")) return
     const [store, setStore] = globalSync.child(directory, { bootstrap: false })
 
     return runSessionPrefetch({
@@ -2352,16 +2355,25 @@ export default function Layout(props: ParentProps) {
       onOpenSettings={openSettings}
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-      renderPanel={() =>
-        mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
-      }
+      onNewSession={(type: TabType) => {
+        try { sessionStorage.setItem("ultron:pending-session-type", type) } catch {}
+        navigate(`/${params.dir}/session/__tab_${type}__`)
+      }}
+      renderPanel={(filter: (id: string) => boolean) => {
+        const p = currentProject()
+        if (!p) return <></>
+        return <LocalWorkspace ctx={workspaceSidebarCtx} project={p} sortNow={sortNow} mobile={mobile} filterSession={filter} />
+      }}
     />
   )
 
   return (
+    <SessionTypeProvider>
+    <PinnedStoreProvider>
     <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       {autoselecting() ?? ""}
-      <Titlebar />
+      {/* Titlebar hidden — commands/keybinds/mobile toggle still active */}
+      <div style={{ display: "none" }}><Titlebar /></div>
       <div class="flex-1 min-h-0 min-w-0 flex">
         <div class="flex-1 min-h-0 relative">
           <div class="size-full relative overflow-x-hidden">
@@ -2507,5 +2519,7 @@ export default function Layout(props: ParentProps) {
       </div>
       <Toast.Region />
     </div>
+    </PinnedStoreProvider>
+    </SessionTypeProvider>
   )
 }

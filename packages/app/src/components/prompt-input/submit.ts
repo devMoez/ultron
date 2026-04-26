@@ -13,11 +13,13 @@ import { usePermission } from "@/context/permission"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { useSessionType, type TabType } from "@/context/session-type"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
+import { parseCrossMentions, resolveCrossMentions } from "@/utils/cross-mention"
 
 type PendingPrompt = {
   abort: AbortController
@@ -212,6 +214,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const layout = useLayout()
   const language = useLanguage()
   const params = useParams()
+  const sessionType = useSessionType()
 
   const errorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "data" in err) {
@@ -290,7 +293,32 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     event.preventDefault()
 
     const currentPrompt = prompt.current()
-    const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
+    const rawText = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
+
+    // Resolve cross-tab @mentions (@chat[id], @code[id], @cowork[id])
+    const mentions = parseCrossMentions(rawText)
+    let text = rawText
+    if (mentions.length > 0) {
+      text = resolveCrossMentions(
+        rawText,
+        (id) => {
+          const msgs = sync.data.message[id] ?? []
+          return msgs.map((msg) => {
+            const parts = sync.data.part[msg.id] ?? []
+            const textContent = parts
+              .filter((p) => p.type === "text" && !("synthetic" in p && (p as {synthetic?: boolean}).synthetic))
+              .map((p) => ("text" in p ? (p as {text: string}).text : ""))
+              .join(" ")
+            return { id: msg.id, role: msg.role as "user" | "assistant", text: textContent }
+          })
+        },
+        (id) => {
+          const session = sync.session.get(id)
+          return session?.title ?? id
+        },
+      )
+    }
+
     const images = input.imageAttachments().slice()
     const mode = input.mode()
 
@@ -314,7 +342,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     input.resetHistoryNavigation()
 
     const projectDirectory = sdk.directory
-    const isNewSession = !params.id
+    const isNewSession = !params.id || params.id.startsWith("__tab_")
     const shouldAutoAccept = isNewSession && input.autoAccept()
     const worktreeSelection = input.newSessionWorktree?.() || "main"
 
@@ -375,6 +403,17 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       if (created) {
         seed(sessionDirectory, created)
         session = created
+        // Tag the new session with its tab type.
+        // Prefer reading from the virtual route ID (most reliable), fall back to sessionStorage.
+        try {
+          const fromRoute = params.id?.startsWith("__tab_")
+            ? (params.id.replace("__tab_", "").replace(/__$/, "") as TabType)
+            : null
+          const tabType: TabType = fromRoute ?? (sessionStorage.getItem("ultron:pending-session-type") as TabType | null) ?? "code"
+          sessionStorage.removeItem("ultron:pending-session-type")
+          // Use the reactive context store so sidebar re-renders immediately
+          sessionType.set(session.id, tabType)
+        } catch {}
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
         local.session.promote(sessionDirectory, session.id)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)

@@ -140,6 +140,42 @@ export function tui(input: {
 
     const renderer = await createCliRenderer(rendererConfig(input.config))
 
+    // ── Terminal safety net ──────────────────────────────────────────────────
+    // Write raw escape sequences to restore terminal state. Runs even on hard
+    // crashes, before the process exits, so the shell is never left broken.
+    const TERM_RESET =
+      "\x1b[?1049l" + // exit alternate screen
+      "\x1b[?1003l" + // disable all-motion mouse tracking
+      "\x1b[?1006l" + // disable SGR mouse mode
+      "\x1b[?1015l" + // disable URXVT extended mouse
+      "\x1b[?2004l" + // disable bracketed paste
+      "\x1b[?25h" + // show cursor
+      "\x1b[0m\r\n" // reset text attributes
+
+    const terminalSafetyNet = () => {
+      try {
+        process.stdout.write(TERM_RESET)
+      } catch {}
+    }
+    process.once("exit", terminalSafetyNet)
+
+    const crashHandler = (error: unknown) => {
+      try {
+        renderer.destroy()
+      } catch {}
+      terminalSafetyNet()
+      const msg = error instanceof Error ? (error.stack ?? error.message) : String(error)
+      try {
+        process.stderr.write(`\nUltron: unhandled crash — ${msg}\n`)
+      } catch {}
+      process.exit(1)
+    }
+
+    process.on("uncaughtException", crashHandler)
+    process.on("unhandledRejection", (reason) => crashHandler(reason))
+    // ────────────────────────────────────────────────────────────────────────
+
+    try {
     await render(() => {
       return (
         <ErrorBoundary
@@ -202,6 +238,16 @@ export function tui(input: {
         </ErrorBoundary>
       )
     }, renderer)
+    } catch (renderError) {
+      try {
+        renderer.destroy()
+      } catch {}
+      throw renderError
+    } finally {
+      process.removeListener("exit", terminalSafetyNet)
+      process.off("uncaughtException", crashHandler)
+      process.off("unhandledRejection", crashHandler)
+    }
   })
 }
 

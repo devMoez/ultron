@@ -74,21 +74,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }),
     )
 
-    const [store, setStore] = createStore<{
-      current?: string
-      draft?: State
-      last?: {
-        type: "agent" | "model" | "variant"
-        agent?: string
-        model?: ModelKey | null
-        variant?: string | null
-      }
-    }>({
-      current: list()[0]?.name,
-      draft: undefined,
-      last: undefined,
-    })
-
     const validModel = (model: ModelKey) => {
       const provider = providers.all().find((item) => item.id === model.providerID)
       return !!provider?.models[model.modelID] && connected().has(model.providerID)
@@ -108,6 +93,29 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return items.find((item) => item.name === name) ?? items[0]
     }
 
+    const defaultAgentName = () => {
+      const items = list()
+      if (items.length === 0) return undefined
+      const configured = sync.data.config.default_agent
+      if (configured && items.some((item) => item.name === configured)) return configured
+      return items[0]?.name
+    }
+
+    const [store, setStore] = createStore<{
+      current?: string
+      draft?: State
+      last?: {
+        type: "agent" | "model" | "variant"
+        agent?: string
+        model?: ModelKey | null
+        variant?: string | null
+      }
+    }>({
+      current: defaultAgentName(),
+      draft: undefined,
+      last: undefined,
+    })
+
     createEffect(() => {
       const items = list()
       if (items.length === 0) {
@@ -115,7 +123,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return
       }
       if (items.some((item) => item.name === store.current)) return
-      setStore("current", items[0]?.name)
+      setStore("current", defaultAgentName())
     })
 
     const scope = createMemo<State | undefined>(() => {

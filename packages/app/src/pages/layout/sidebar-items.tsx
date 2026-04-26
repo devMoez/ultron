@@ -12,6 +12,8 @@ import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
+import { usePinnedStore } from "@/context/pinned-store"
+import { useSessionType } from "@/context/session-type"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
@@ -147,6 +149,22 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const notification = useNotification()
   const permission = usePermission()
   const globalSync = useGlobalSync()
+  const pinnedStore = usePinnedStore()
+  const sessionType = useSessionType()
+  const isPinned = createMemo(() => pinnedStore.isPinnedEntity(props.session.id))
+  const togglePin = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (isPinned()) {
+      pinnedStore.unpinEntity(props.session.id)
+    } else {
+      pinnedStore.pinEntity({
+        type: sessionType.get(props.session.id),
+        id: props.session.id,
+        title: sessionTitle(props.session.title) ?? props.session.id.slice(0, 8),
+      })
+    }
+  }
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
   const [sessionStore] = globalSync.child(props.session.directory)
@@ -243,6 +261,28 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           </div>
 
           <Show when={!props.level}>
+            {/* Pin button */}
+            <div
+              class="shrink-0 overflow-hidden transition-[width,opacity]"
+              classList={{
+                "w-6 opacity-100 pointer-events-auto": !!props.mobile || isPinned(),
+                "w-0 opacity-0 pointer-events-none": !props.mobile && !isPinned(),
+                "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
+                "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
+              }}
+            >
+              <Tooltip value={isPinned() ? "Unpin" : "Pin"} placement="top">
+                <button
+                  class="size-6 rounded-md flex items-center justify-center text-[13px] hover:bg-surface-raised-base-hover transition-colors"
+                  style={{ color: isPinned() ? "#a78bfa" : "#666", border: "none", cursor: "pointer", background: "transparent" }}
+                  aria-label={isPinned() ? "Unpin" : "Pin"}
+                  onClick={togglePin}
+                >
+                  📌
+                </button>
+              </Tooltip>
+            </div>
+            {/* Archive button */}
             <div
               class="shrink-0 overflow-hidden transition-[width,opacity]"
               classList={{

@@ -272,8 +272,15 @@ export function SessionHeader() {
   const [centerMount, setCenterMount] = createSignal<HTMLElement | null>(null)
   const [rightMount, setRightMount] = createSignal<HTMLElement | null>(null)
   onMount(() => {
-    setCenterMount(document.getElementById("opencode-titlebar-center"))
-    setRightMount(document.getElementById("opencode-titlebar-right"))
+    // Mount into sidebar toolbar slots (preferred), fall back to titlebar slots
+    setCenterMount(
+      document.getElementById("ultron-sidebar-search") ??
+        document.getElementById("opencode-titlebar-center"),
+    )
+    setRightMount(
+      document.getElementById("ultron-sidebar-toolbar") ??
+        document.getElementById("opencode-titlebar-right"),
+    )
   })
 
   return (
