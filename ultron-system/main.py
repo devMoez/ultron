@@ -1,4 +1,5 @@
 """
+This file handles the entry point for the Ultron system dashboard and background services.
 Ultron Tracker System — Main Entry Point
 Runs the full boot sequence then starts the dashboard.
 """

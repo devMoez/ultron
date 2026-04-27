@@ -1,3 +1,4 @@
+// This file handles the main entry point for the OpenCode core engine, initializing the CLI and agent handlers.
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"

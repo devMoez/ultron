@@ -1,4 +1,5 @@
 """
+This file handles the primary Python orchestration for multi-agent swarm tasks.
 Step 4: Orchestrator – spawns all agents, watches task queue, manages health.
 Enhanced with: WebSocket real-time push, DAG, AgentRegistry, MessageBus, SkillOrchestra.
 Run via start.ps1 or: python orchestrator.py
