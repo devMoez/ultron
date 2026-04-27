@@ -1,0 +1,14 @@
+# AI Behavior Rules for Ultron
+
+You are working in a massive monorepo. To save tokens and maintain context:
+
+1. **NEVER** perform a recursive directory listing (`ls -R` or `find .`).
+2. **ALWAYS** read `GEMINI.md` at the root before doing anything else.
+3. **USE THE MAP:** Refer to `.opencode/repo-map/` to find where logic lives.
+4. **TRUST THE HEADERS:** The `// This file handles...` comments at the top of files are your source of truth for file responsibility.
+5. **PILLARS:**
+   - TypeScript Engine: `packages/opencode`
+   - Python Swarm: `swarm/`
+   - Dashboard/System: `ultron-system/`
+
+If you are lost, do NOT search. Read `.opencode/repo-map/structure.md`.
