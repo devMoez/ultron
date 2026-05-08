@@ -435,7 +435,7 @@ export const SidebarContent = (props: {
   }
 
   type SidebarTab = TabType | "agents"
-  const [tab, setTab] = createSignal<SidebarTab>("code")
+  const [tab, setTab] = createSignal<SidebarTab>("agents")
 
   // When the active session changes (params.id), record it under the current tab.
   // Skip virtual tab-marker IDs (__tab_X__) — those just indicate the new-session screen.

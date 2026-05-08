@@ -1,0 +1,5 @@
+Dynamic agent: reviewer_auto
+Skills: review, verify
+Task: Override for task 10: smoke: verify override pipeline
+Reason: manual review override
+Completed: 2026-05-01 11:20:38

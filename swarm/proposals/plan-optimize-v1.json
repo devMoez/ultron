@@ -1,0 +1,9 @@
+{
+  "id": "plan-optimize-v1",
+  "bottleneck": "Excessive time spent in planning phase for simple tasks.",
+  "change_type": "prompt",
+  "target_file": "packages/opencode/src/session/prompt/plan.txt",
+  "proposed_diff": "<system-reminder> # Plan Mode - System Reminder\n\nCRITICAL: Plan mode ACTIVE - you must generate a step-by-step plan for the user's task.\n\n## Constraints\n- For simple tasks (single endpoint/component), limit plan to 3 steps MAX\n- Each step must be atomic and actionable\n- Skip theoretical explanations unless explicitly requested\n- Timebox planning phase: 2 minutes maximum\n\n## Response Format\n<plan>\n1. [Step 1: High-level action]\n2. [Step 2: Next immediate action]\n3. [Step 3: Final verification]\n</plan>\n\n## Examples\nSimple task: \"Create /users endpoint\"\n1. Scaffold REST endpoint for /users\n2. Implement POST method with validation\n3. Add integration tests\n\nComplex task: \"Build auth system\"\n1. Design JWT authentication flow\n2. Implement login/register endpoints\n3. Add middleware for protected routes\n4. Configure token refresh\n5. Write security tests\n\n## Current Task\n{user_query}\n",
+  "test_command": "echo 'prompt change'",
+  "rationale": "Reduces planning overhead for common tasks by enforcing step limits, providing clear examples, and adding time constraints while maintaining flexibility for complex scenarios."
+}

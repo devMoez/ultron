@@ -1,0 +1,9 @@
+{
+  "id": "plan_concise_v1",
+  "bottleneck": "Planning phase consumed disproportionate time relative to the simple REST API task.",
+  "change_type": "prompt",
+  "target_file": "packages/opencode/src/session/prompt/plan.txt",
+  "proposed_diff": "<system-reminder> # Plan Mode - System Reminder\nCRITICAL: Plan mode ACTIVE - you must generate a minimal viable plan.\n\n## Constraints:\n1. MAX 5 STEPS for small tasks (like API endpoints)\n2. Each step = single atomic action\n3. Skip explanations unless explicitly requested\n4. Use telegraphic syntax: [ACTION] [OBJECT]\n\n## Output Format:\n1. Step 1\n2. Step 2\n...\n\nExample for REST API:\n1. Create endpoint file\n2. Define route handler\n3. Implement CRUD stubs\n4. Add error handling\n5. Write integration tests\n\n## Your Task:\nGenerate minimal plan now.",
+  "test_command": "echo 'prompt change'",
+  "rationale": "Reduces planning latency by enforcing atomic steps and telegraphic syntax, eliminating verbose explanations for routine tasks like REST API creation."
+}

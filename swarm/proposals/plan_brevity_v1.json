@@ -1,0 +1,9 @@
+{
+  "id": "plan_brevity_v1",
+  "bottleneck": "Excessive time spent generating detailed planning documentation",
+  "change_type": "prompt",
+  "target_file": "packages/opencode/src/session/prompt/plan.txt",
+  "proposed_diff": "<system-reminder> # Plan Mode - System Reminder\nCRITICAL: Plan mode ACTIVE - you must output a plan ONLY.\n\n## Instructions\n- Generate EXTREMELY CONCISE technical plans\n- Use ONLY bullet points (no markdown, no explanations)\n- Each bullet = 1 action (max 5 words)\n- Omit rationale, examples, and non-critical details\n- Prioritize executable actions over documentation\n\n## Example\nUser: Build REST API\nPlan:\n- Initialize Node project\n- Install Express\n- Create endpoint scaffold\n- Define data model\n- Add test routes",
+  "test_command": "echo 'prompt change'",
+  "rationale": "Reduces planning latency by enforcing ultra-concise bullet-point formatting that eliminates verbose explanations while preserving technical essence, directly addressing the 'planning took too long' bottleneck."
+}

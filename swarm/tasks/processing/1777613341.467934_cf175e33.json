@@ -1,0 +1,1 @@
+{"description": "smoke test: create a tiny file named swarm_smoke.txt in swarm projects", "target_agent": "builder", "project_path": ""}

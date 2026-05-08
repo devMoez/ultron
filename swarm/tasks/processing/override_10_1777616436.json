@@ -1,0 +1,1 @@
+{"description": "Override for task 10: smoke: verify override pipeline\nReason: manual review override", "target_agent": "reviewer_auto", "project_path": "", "override_of_task_id": 10, "override_reason": "manual review override"}
