@@ -1,0 +1,2059 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Swarm Manager — Ultron</title>
+<style>
+  /* ============================================================
+     THEME — shared with Ultron UI
+     ============================================================ */
+  :root {
+    --bg:            #0e0c08;
+    --bg-elevated:   #16130d;
+    --bg-card:       #1a1610;
+    --bg-card-hover: #1f1a13;
+    --border:        #2a2419;
+    --border-soft:   #1e1a13;
+    --border-strong: #3a3120;
+
+    --text-primary:   #e6dccb;
+    --text-secondary: #b8a888;
+    --text-muted:     #7d7058;
+    --text-faint:     #524a3a;
+
+    --accent:        #d49a5c;
+    --accent-soft:   rgba(212,154,92,0.12);
+    --accent-edge:   rgba(212,154,92,0.4);
+
+    --ok:            #6fae74;
+    --warn:          #d4a85c;
+    --danger:        #c97864;
+    --info:          #6f9ec9;
+    --idle:          #7d7058;
+
+    --radius-sm: 5px;
+    --radius:    8px;
+    --radius-lg: 12px;
+
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.25);
+    --shadow-pop:  0 16px 40px rgba(0,0,0,0.5);
+
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  /* Tiny ambient glow */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: -200px -200px auto auto;
+    width: 700px; height: 700px;
+    background: radial-gradient(circle at 30% 30%, rgba(212,154,92,0.05), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input, textarea, select { font: inherit; color: inherit; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2a2419; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3120; }
+
+  /* ============================================================
+     LAYOUT
+     ============================================================ */
+  .app {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-rows: 56px 1fr;
+    height: 100vh;
+  }
+
+  /* ---------- Top Bar ---------- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--border-soft);
+    background: rgba(14,12,8,0.85);
+    backdrop-filter: blur(8px);
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding-right: 12px;
+    border-right: 1px solid var(--border-soft);
+    margin-right: 4px;
+  }
+  .brand-mark {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--accent), #b07a3d);
+    display: grid;
+    place-items: center;
+    color: #1a1610;
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .brand-name { font-weight: 600; letter-spacing: 0.02em; }
+  .brand-sub  { color: var(--text-muted); font-size: 11.5px; }
+
+  .topbar-spacer { flex: 1; }
+
+  .stat-group {
+    display: flex;
+    align-items: stretch;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 14px;
+    border-right: 1px solid var(--border-soft);
+    min-width: 64px;
+  }
+  .stat:last-child { border-right: 0; }
+  .stat-val {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.1;
+  }
+  .stat-lbl {
+    font-size: 9.5px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 1px;
+  }
+  .stat.accent .stat-val { color: var(--accent); }
+
+  .topbar .pill-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+  }
+  .topbar .pill-btn:hover { color: var(--text-primary); background: var(--bg-card); border-color: var(--border); }
+  .topbar .pill-btn svg { width: 13px; height: 13px; }
+  .topbar .pill-btn.primary {
+    background: var(--accent);
+    color: #1a1610;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .topbar .pill-btn.primary:hover { background: #e6a86b; }
+
+  /* ---------- Main grid ---------- */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .center {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .right-rail {
+    border-left: 1px solid var(--border-soft);
+    background: rgba(22,19,13,0.4);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ---------- Filter bar ---------- */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--border-soft);
+    overflow-x: auto;
+  }
+  .filter-bar .label {
+    color: var(--text-faint);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-right: 4px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-size: 11.5px;
+    transition: all 140ms ease;
+    white-space: nowrap;
+  }
+  .chip:hover { color: var(--text-primary); border-color: var(--border); }
+  .chip.active {
+    background: var(--accent-soft);
+    border-color: var(--accent-edge);
+    color: var(--accent);
+  }
+  .chip .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .filter-spacer { flex: 1; }
+
+  .view-toggle {
+    display: inline-flex;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    padding: 2px;
+  }
+  .view-toggle button {
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
+  .view-toggle button.active {
+    background: var(--bg-card);
+    color: var(--text-primary);
+  }
+
+  /* ---------- Agent grid ---------- */
+  .agent-area {
+    overflow-y: auto;
+    padding: 18px;
+    min-height: 0;
+  }
+  .agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 14px;
+  }
+  .agent-list { display: flex; flex-direction: column; gap: 6px; }
+
+  /* ---------- Agent card ---------- */
+  .agent-card {
+    position: relative;
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 14px;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+    overflow: hidden;
+  }
+  .agent-card::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent-status, var(--idle));
+    opacity: 0.6;
+  }
+  .agent-card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border);
+    transform: translateY(-1px);
+  }
+  .agent-card:hover::before { opacity: 1; }
+  .agent-card.selected {
+    border-color: var(--accent-edge);
+    background: var(--bg-card-hover);
+  }
+  .agent-card.selected::before { opacity: 1; }
+
+  .ac-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .ac-avatar {
+    width: 32px; height: 32px;
+    border-radius: 7px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    display: grid;
+    place-items: center;
+    color: var(--text-secondary);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .ac-id {
+    flex: 1;
+    min-width: 0;
+  }
+  .ac-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 13.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ac-role {
+    color: var(--text-muted);
+    font-size: 11.5px;
+    margin-top: 1px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ac-role .role-tag {
+    color: var(--text-secondary);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    padding: 1px 6px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+  }
+  .ac-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px 2px 6px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 500;
+    background: rgba(0,0,0,0.25);
+    color: var(--accent-status);
+    border: 1px solid currentColor;
+  }
+  .ac-status .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 2px rgba(0,0,0,0.2);
+  }
+  .ac-status.pulsing .status-dot {
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 currentColor; }
+    50%      { box-shadow: 0 0 0 4px transparent; opacity: 0.6; }
+  }
+
+  .ac-task {
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    line-height: 1.4;
+    margin-bottom: 10px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    min-height: 36px;
+  }
+
+  .ac-progress {
+    height: 4px;
+    background: var(--bg-elevated);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .ac-progress-fill {
+    height: 100%;
+    background: var(--accent-status, var(--accent));
+    transition: width 400ms cubic-bezier(.4,0,.2,1);
+    border-radius: 2px;
+  }
+
+  .ac-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-faint);
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+  .ac-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .ac-meta-item svg { width: 11px; height: 11px; }
+
+  /* List view variant */
+  .agent-list .agent-card {
+    display: grid;
+    grid-template-columns: 32px 1.5fr 1fr 90px 80px 100px;
+    gap: 14px;
+    align-items: center;
+    padding: 10px 14px;
+  }
+  .agent-list .agent-card .ac-head { margin: 0; display: contents; }
+  .agent-list .agent-card .ac-task { display: none; }
+  .agent-list .agent-card .ac-meta { justify-self: end; }
+  .agent-list .agent-card .ac-progress {
+    margin: 0;
+    height: 6px;
+  }
+
+  /* ---------- Right Rail ---------- */
+  .rail-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .rail-h {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--text-faint);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+  }
+  .rail-h .rail-h-action {
+    color: var(--text-muted);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .rail-h .rail-h-action:hover { color: var(--accent); }
+
+  /* Topology mini-graph */
+  .topo {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    height: 200px;
+    position: relative;
+    overflow: hidden;
+  }
+  .topo-svg { width: 100%; height: 100%; }
+  .topo-node {
+    cursor: pointer;
+    transition: all 200ms ease;
+  }
+  .topo-node:hover circle { stroke-width: 2.5; }
+  .topo-node circle { transition: all 200ms ease; }
+  .topo-edge {
+    stroke: var(--border);
+    stroke-width: 1;
+    fill: none;
+  }
+  .topo-edge.active {
+    stroke: var(--accent);
+    stroke-width: 1.6;
+    animation: dash 1.2s linear infinite;
+    stroke-dasharray: 4 4;
+  }
+  @keyframes dash { to { stroke-dashoffset: -16; } }
+
+  /* Activity feed */
+  .feed {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+  .feed-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 8px 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    font-size: 12px;
+    transition: background 160ms ease;
+  }
+  .feed-item:hover { background: var(--bg-card-hover); }
+  .feed-icon {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    background: var(--bg-card);
+    color: var(--text-muted);
+  }
+  .feed-icon svg { width: 11px; height: 11px; }
+  .feed-icon.spawn { background: rgba(111,158,201,0.1); color: var(--info); }
+  .feed-icon.skill { background: rgba(212,154,92,0.1); color: var(--accent); }
+  .feed-icon.msg   { background: rgba(184,168,136,0.1); color: var(--text-secondary); }
+  .feed-icon.done  { background: rgba(111,174,116,0.1); color: var(--ok); }
+  .feed-icon.err   { background: rgba(201,120,100,0.1); color: var(--danger); }
+
+  .feed-body {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .feed-actor {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 12px;
+  }
+  .feed-text {
+    color: var(--text-secondary);
+    font-size: 11.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .feed-text .mono {
+    font-family: var(--mono);
+    color: var(--accent);
+    font-size: 11px;
+  }
+  .feed-time {
+    color: var(--text-faint);
+    font-size: 10.5px;
+    font-family: var(--mono);
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+
+  /* ============================================================
+     SPAWN MODAL
+     ============================================================ */
+  .scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(3px);
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: 32px;
+    animation: fade 160ms ease;
+  }
+  .scrim[hidden] { display: none; }
+  @keyframes fade { from { opacity: 0; } }
+
+  .modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-pop);
+    width: min(560px, 100%);
+    max-height: 88vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-h {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-soft);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-h h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .modal-h .close-btn {
+    width: 28px; height: 28px;
+    border-radius: 5px;
+    color: var(--text-muted);
+    display: grid; place-items: center;
+  }
+  .modal-h .close-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+
+  .modal-body {
+    padding: 20px;
+    overflow-y: auto;
+  }
+  .modal-foot {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border-soft);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .field label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+  }
+  .field .hint { font-size: 11.5px; color: var(--text-muted); }
+  .field input[type=text],
+  .field textarea,
+  .field select {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    padding: 9px 11px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 140ms ease;
+  }
+  .field input[type=text]:focus,
+  .field textarea:focus,
+  .field select:focus {
+    border-color: var(--accent-edge);
+  }
+  .field textarea { resize: vertical; min-height: 60px; font-family: inherit; }
+
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .role-grid, .tool-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+  }
+  .role-opt, .tool-opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 140ms ease;
+    user-select: none;
+  }
+  .role-opt:hover, .tool-opt:hover {
+    border-color: var(--border);
+    color: var(--text-primary);
+  }
+  .role-opt.selected, .tool-opt.selected {
+    background: var(--accent-soft);
+    border-color: var(--accent-edge);
+    color: var(--accent);
+  }
+  .role-opt .role-icon {
+    width: 16px; height: 16px;
+    flex-shrink: 0;
+  }
+  .tool-opt .tool-check {
+    width: 14px; height: 14px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    color: var(--accent);
+  }
+  .tool-opt.selected .tool-check {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .btn {
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    border: 1px solid transparent;
+    transition: all 140ms ease;
+  }
+  .btn.ghost { background: transparent; color: var(--text-secondary); }
+  .btn.ghost:hover { background: var(--bg-elevated); color: var(--text-primary); }
+  .btn.primary {
+    background: var(--accent);
+    color: #1a1610;
+    font-weight: 600;
+  }
+  .btn.primary:hover { background: #e6a86b; }
+  .btn.danger {
+    background: rgba(201,120,100,0.12);
+    color: var(--danger);
+    border-color: rgba(201,120,100,0.4);
+  }
+  .btn.danger:hover { background: rgba(201,120,100,0.2); }
+
+  /* ============================================================
+     AGENT DETAIL DRAWER
+     ============================================================ */
+  .drawer {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: min(560px, 92vw);
+    background: var(--bg-card);
+    border-left: 1px solid var(--border);
+    box-shadow: -16px 0 40px rgba(0,0,0,0.4);
+    z-index: 90;
+    transform: translateX(100%);
+    transition: transform 240ms cubic-bezier(.4,0,.2,1);
+    display: flex;
+    flex-direction: column;
+  }
+  .drawer.open { transform: translateX(0); }
+  .drawer-h {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-soft);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .drawer-h .ac-avatar { width: 38px; height: 38px; font-size: 13px; }
+  .drawer-h-text { flex: 1; min-width: 0; }
+  .drawer-h-text .ac-name { font-size: 15px; }
+  .drawer-h-actions {
+    display: flex;
+    gap: 4px;
+  }
+  .icon-btn {
+    width: 30px; height: 30px;
+    border-radius: 6px;
+    display: grid;
+    place-items: center;
+    color: var(--text-muted);
+    transition: all 140ms ease;
+  }
+  .icon-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+  .icon-btn.danger:hover { background: rgba(201,120,100,0.1); color: var(--danger); }
+  .icon-btn svg { width: 14px; height: 14px; }
+
+  .drawer-tabs {
+    display: flex;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border-soft);
+    gap: 2px;
+  }
+  .drawer-tab {
+    padding: 10px 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 140ms ease;
+  }
+  .drawer-tab:hover { color: var(--text-secondary); }
+  .drawer-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 20px;
+  }
+
+  .drawer-section { margin-bottom: 22px; }
+  .drawer-section h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    margin: 0 0 8px;
+  }
+
+  .goal-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    color: var(--text-primary);
+    line-height: 1.5;
+    font-size: 13px;
+  }
+
+  .progress-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .progress-bar {
+    height: 6px;
+    background: var(--bg-elevated);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 400ms ease;
+  }
+  .progress-pct { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); min-width: 40px; text-align: right; }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .stat-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+  }
+  .stat-card .lbl {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+  }
+  .stat-card .val {
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 4px;
+  }
+  .stat-card .delta {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .stat-card .delta.up { color: var(--ok); }
+  .stat-card .delta.down { color: var(--danger); }
+
+  /* Activity log */
+  .log {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .log-row {
+    display: grid;
+    grid-template-columns: 64px 16px 1fr;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-soft);
+    line-height: 1.4;
+  }
+  .log-row:last-child { border-bottom: 0; }
+  .log-row .log-time { color: var(--text-faint); font-size: 11px; }
+  .log-row .log-tag {
+    border-radius: 3px;
+    background: var(--bg-card);
+    text-align: center;
+    font-size: 10px;
+    color: var(--text-muted);
+    padding: 1px 0;
+  }
+  .log-row.skill .log-tag { color: var(--accent); }
+  .log-row.msg .log-tag { color: var(--info); }
+  .log-row.error .log-tag { color: var(--danger); background: rgba(201,120,100,0.08); }
+  .log-row.done .log-tag { color: var(--ok); }
+  .log-row .log-msg { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log-row .log-msg .arg { color: var(--accent); }
+  .log-row.error .log-msg { color: var(--danger); }
+
+  /* Tools */
+  .tool-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .tool-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 9px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: 5px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    transition: all 140ms ease;
+  }
+  .tool-tag:hover { border-color: var(--accent-edge); color: var(--accent); }
+  .tool-tag .uses {
+    color: var(--text-faint);
+    font-size: 10px;
+  }
+  .tool-tag.recent { border-color: var(--accent-edge); color: var(--accent); }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-size: 12.5px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    box-shadow: var(--shadow-pop);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease, transform 180ms ease;
+    z-index: 200;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Tooltip on hover (used on stats) */
+  [data-tip] { position: relative; }
+  [data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    z-index: 50;
+  }
+
+  .empty-state {
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+  }
+  .empty-state h3 { color: var(--text-secondary); margin: 0 0 6px; font-size: 14px; }
+  .empty-state p { margin: 0 0 14px; font-size: 12.5px; }
+
+  /* Back-to-Ultron link */
+  .back-link {
+    display: inline-flex; align-items: center; gap: 5px;
+    color: var(--text-muted);
+    font-size: 11.5px;
+    padding: 4px 8px;
+    border-radius: 5px;
+    transition: all 140ms ease;
+    text-decoration: none;
+  }
+  .back-link:hover { color: var(--text-primary); background: var(--bg-elevated); }
+  .back-link svg { width: 12px; height: 12px; }
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- ============ TOP BAR ============ -->
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-mark">U</div>
+        <div>
+          <div class="brand-name">Swarm</div>
+          <div class="brand-sub">opencode · main</div>
+        </div>
+      </div>
+      <a href="Ultron UI.html" class="back-link" title="Back to Ultron">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Ultron
+      </a>
+
+      <div class="topbar-spacer"></div>
+
+      <div class="stat-group">
+        <div class="stat" data-tip="Total agents in this swarm">
+          <div class="stat-val" id="m-total">0</div>
+          <div class="stat-lbl">agents</div>
+        </div>
+        <div class="stat accent" data-tip="Currently working">
+          <div class="stat-val" id="m-active">0</div>
+          <div class="stat-lbl">active</div>
+        </div>
+        <div class="stat" data-tip="Tokens used (last hour)">
+          <div class="stat-val" id="m-tokens">0</div>
+          <div class="stat-lbl">tokens</div>
+        </div>
+        <div class="stat" data-tip="Estimated cost (USD)">
+          <div class="stat-val" id="m-cost">$0.00</div>
+          <div class="stat-lbl">cost</div>
+        </div>
+      </div>
+
+      <button class="pill-btn" id="btn-pause-all" title="Pause every running agent">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
+        Pause all
+      </button>
+      <button class="pill-btn primary" id="btn-spawn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New agent
+      </button>
+    </div>
+
+    <!-- ============ MAIN GRID ============ -->
+    <div class="main-grid">
+      <!-- ----- CENTER COLUMN ----- -->
+      <div class="center">
+        <!-- Filter / view bar -->
+        <div class="filter-bar">
+          <span class="label">Status</span>
+          <button class="chip active" data-filter="all">All</button>
+          <button class="chip" data-filter="working" style="--c: var(--accent)">
+            <span class="dot"></span>Working
+          </button>
+          <button class="chip" data-filter="idle" style="--c: var(--idle)">
+            <span class="dot"></span>Idle
+          </button>
+          <button class="chip" data-filter="blocked" style="--c: var(--warn)">
+            <span class="dot"></span>Blocked
+          </button>
+          <button class="chip" data-filter="done" style="--c: var(--ok)">
+            <span class="dot"></span>Done
+          </button>
+          <button class="chip" data-filter="error" style="--c: var(--danger)">
+            <span class="dot"></span>Error
+          </button>
+
+          <span class="label" style="margin-left: 12px;">Role</span>
+          <select id="role-filter" class="chip" style="background: transparent; padding: 4px 10px; appearance: none;">
+            <option value="all">All roles</option>
+          </select>
+
+          <div class="filter-spacer"></div>
+
+          <div class="view-toggle">
+            <button class="active" data-view="grid">Grid</button>
+            <button data-view="list">List</button>
+          </div>
+        </div>
+
+        <!-- Agent area -->
+        <div class="agent-area" id="agent-area">
+          <div id="agent-grid" class="agent-grid"></div>
+          <div id="empty" class="empty-state" hidden>
+            <h3>No agents yet</h3>
+            <p>Spawn an agent to start coordinating work in this swarm.</p>
+            <button class="btn primary" data-action="spawn">+ New agent</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ----- RIGHT RAIL ----- -->
+      <div class="right-rail">
+        <div class="rail-section">
+          <div class="rail-h">
+            <span>Topology</span>
+            <span class="rail-h-action" id="topo-relayout">Re-layout</span>
+          </div>
+          <div class="topo">
+            <svg id="topo-svg" class="topo-svg" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </div>
+
+         <div class="rail-section" style="height: 280px; min-height: 0; display: flex; flex-direction: column;">
+           <div class="rail-h">
+             <span>Live activity</span>
+             <span class="rail-h-action" id="feed-clear">Clear</span>
+           </div>
+           <div id="feed" class="feed" style="flex:1; overflow:hidden;"></div>
+         </div>
+         <div class="rail-section">
+           <div class="rail-h"><span>Dispatch Task</span></div>
+           <div style="display:flex; flex-direction:column; gap:6px;">
+
+             <textarea id="task-desc" rows="3"
+               placeholder="Describe what agents should do…"
+               style="
+                 width:100%; box-sizing:border-box;
+                 background:var(--bg-elevated); border:1px solid var(--border-soft);
+                 border-radius:var(--radius-sm); padding:8px 10px;
+                 color:var(--text-primary); font:inherit; font-size:12.5px;
+                 resize:vertical; outline:none; transition:border-color 140ms ease;
+               "
+               onfocus="this.style.borderColor='var(--accent-edge)'"
+               onblur="this.style.borderColor='var(--border-soft)'"></textarea>
+
+             <input id="task-skills" type="text" placeholder="Skills: python, filesystem (optional)"
+               style="
+                 width:100%; box-sizing:border-box;
+                 background:var(--bg-elevated); border:1px solid var(--border-soft);
+                 border-radius:var(--radius-sm); padding:7px 10px;
+                 color:var(--text-primary); font:inherit; font-size:12px;
+                 outline:none; transition:border-color 140ms ease;
+               "
+               onfocus="this.style.borderColor='var(--accent-edge)'"
+               onblur="this.style.borderColor='var(--border-soft)'">
+
+             <div style="display:flex; gap:6px; align-items:center;">
+               <input id="task-prio" type="number" value="0" min="0" max="10"
+                 title="Priority 0–10"
+                 style="
+                   width:60px; flex-shrink:0;
+                   background:var(--bg-elevated); border:1px solid var(--border-soft);
+                   border-radius:var(--radius-sm); padding:7px 8px;
+                   color:var(--text-primary); font:inherit; font-size:12px;
+                   outline:none; text-align:center; transition:border-color 140ms ease;
+                 "
+                 onfocus="this.style.borderColor='var(--accent-edge)'"
+                 onblur="this.style.borderColor='var(--border-soft)'">
+               <span style="font-size:10.5px; color:var(--text-faint);">priority</span>
+               <button id="btn-send-task"
+                 style="
+                   flex:1;
+                   background:var(--accent); color:#1a1610; font:inherit; font-size:12.5px;
+                   font-weight:600; border:none; border-radius:var(--radius-sm);
+                   padding:7px 12px; cursor:pointer; transition:background 140ms ease;
+                 "
+                 onmouseover="this.style.background='#e6a86b'"
+                 onmouseout="this.style.background='var(--accent)'">Send Task</button>
+             </div>
+
+           </div>
+         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SPAWN MODAL ============ -->
+  <div id="spawn-scrim" class="scrim" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="spawn-title">
+      <div class="modal-h">
+        <h2 id="spawn-title">Spawn new agent</h2>
+        <button class="close-btn" id="spawn-close" title="Close (Esc)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="field-row">
+          <div class="field">
+            <label for="f-name">Name</label>
+            <input id="f-name" type="text" placeholder="e.g. recon-01" />
+          </div>
+          <div class="field">
+            <label for="f-parent">Parent</label>
+            <select id="f-parent">
+              <option value="">— None (root) —</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Role</label>
+          <div class="role-grid" id="f-roles"></div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="f-model">Model</label>
+            <select id="f-model">
+              <option>Nemotron 3 Super Free</option>
+              <option>Claude 3.5 Sonnet</option>
+              <option>GPT-4 Turbo</option>
+              <option>Llama 3.3 70B</option>
+              <option>Local · qwen2.5-coder</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-budget">Token budget</label>
+            <input id="f-budget" type="text" value="50000" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-goal">Goal / task</label>
+          <textarea id="f-goal" rows="3" placeholder="What should this agent accomplish?"></textarea>
+        </div>
+        <div class="field">
+          <label>Tools</label>
+          <div class="tool-grid" id="f-tools"></div>
+          <div class="hint">Skills / commands the agent can call. You can revoke at runtime.</div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" id="spawn-cancel">Cancel</button>
+        <button class="btn primary" id="spawn-confirm">Spawn agent</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DETAIL DRAWER ============ -->
+  <div id="drawer" class="drawer" aria-hidden="true">
+    <div class="drawer-h">
+      <div class="ac-avatar" id="d-avatar">A1</div>
+      <div class="drawer-h-text">
+        <div class="ac-name" id="d-name">Agent</div>
+        <div class="ac-role">
+          <span class="role-tag" id="d-role">role</span>
+          <span class="ac-status" id="d-status"><span class="status-dot"></span><span id="d-status-text">working</span></span>
+          <span class="ac-meta-item" data-tip="Uptime"><span id="d-uptime">0s</span></span>
+        </div>
+      </div>
+      <div class="drawer-h-actions">
+        <button class="icon-btn" id="d-pause" title="Pause">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
+        </button>
+        <button class="icon-btn" id="d-clone" title="Clone">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+        </button>
+        <button class="icon-btn danger" id="d-stop" title="Stop">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"/></svg>
+        </button>
+        <button class="icon-btn" id="d-close" title="Close (Esc)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="drawer-tabs" id="d-tabs">
+      <button class="drawer-tab active" data-dtab="overview">Overview</button>
+      <button class="drawer-tab" data-dtab="activity">Activity</button>
+      <button class="drawer-tab" data-dtab="tools">Tools</button>
+      <button class="drawer-tab" data-dtab="resources">Resources</button>
+    </div>
+
+    <div class="drawer-body" id="d-body"></div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- ============================================================
+       SCRIPT — live data from true swarm API + WebSocket
+       ============================================================ -->
+  <script>
+  (function () {
+    "use strict";
+
+    const API = "";  // same origin
+
+    // ============ Helpers ============
+    const $ = (s, r=document) => r.querySelector(s);
+    const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+    const esc = (s) => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    const fmt = (n) => n >= 1000 ? (n/1000).toFixed(n>=10000 ? 0 : 1)+"k" : String(n);
+    const rid = () => Math.random().toString(36).slice(2,7);
+    const now = () => Date.now();
+    const uptime = (ms) => {
+      const s = Math.floor(ms/1000);
+      if (s < 60) return s + "s";
+      if (s < 3600) return Math.floor(s/60) + "m " + (s%60) + "s";
+      return Math.floor(s/3600) + "h " + Math.floor((s%3600)/60) + "m";
+    };
+    const ago = (ts) => {
+      const s = Math.floor((now()-ts)/1000);
+      if (s < 5) return "now";
+      if (s < 60) return s + "s";
+      if (s < 3600) return Math.floor(s/60) + "m";
+      return Math.floor(s/3600) + "h";
+    };
+
+    // ============ Catalog ============
+    const ROLES = [
+      { id: "researcher", name: "Researcher", icon: "🔍", desc: "Web + doc lookup" },
+      { id: "coder",      name: "Coder",      icon: "⌨︎", desc: "Edit & write code" },
+      { id: "reviewer",   name: "Reviewer",   icon: "✓",  desc: "Critique & QA" },
+      { id: "planner",    name: "Planner",    icon: "◇",  desc: "Decompose tasks" },
+      { id: "tester",     name: "Tester",     icon: "▣",  desc: "Run & verify" },
+      { id: "ops",        name: "Ops",        icon: "⚙︎", desc: "Deploy & monitor" },
+      { id: "scribe",     name: "Scribe",     icon: "✎",  desc: "Docs & notes" },
+      { id: "scout",      name: "Scout",      icon: "▲",  desc: "Recon & triage" },
+    ];
+    const TOOLS = [
+      "web.search", "web.fetch", "fs.read", "fs.write", "fs.glob",
+      "shell.exec", "git.diff", "git.commit", "py.run", "node.run",
+      "browser.click", "browser.screenshot", "rag.query", "kb.write", "msg.broadcast",
+    ];
+    const STATUS_COLORS = {
+      working: "var(--accent)",
+      idle:    "var(--idle)",
+      blocked: "var(--warn)",
+      done:    "var(--ok)",
+      error:   "var(--danger)",
+      paused:  "var(--info)",
+    };
+    const STATUS_LABEL = {
+      working: "working", idle: "idle", blocked: "blocked",
+      done: "done", error: "error", paused: "paused",
+    };
+
+    // ============ State ============
+    const state = {
+      agents: [],                   // see makeAgent()
+      feed: [],                     // global activity
+      filter: "all",                // status
+      roleFilter: "all",
+      view: "grid",
+      selectedId: null,
+      detailTab: "overview",
+      lastTickAt: now(),
+      tokensUsed: 0,
+      cost: 0,
+    };
+
+    function makeAgent({ name, role, model, goal, parent, budget, tools }) {
+      const id = "a_" + rid();
+      const code = (name || role || "AGT").slice(0,2).toUpperCase();
+      return {
+        id,
+        name: name || (role + "-" + rid().slice(0,3)),
+        code,
+        role,
+        model,
+        goal: goal || "Awaiting orders.",
+        parent: parent || null,
+        children: [],
+        budget: budget || 50000,
+        tokens: 0,
+        cost: 0,
+        apiCalls: 0,
+        cpu: 0,
+        mem: 0,
+        tools: tools && tools.length ? tools : ["fs.read","fs.write","web.search"],
+        toolUses: {},
+        status: "working",
+        progress: 0,
+        currentTask: "Bootstrapping…",
+        log: [],
+        createdAt: now(),
+        lastActiveAt: now(),
+        // runtime sim
+        _nextActionAt: now() + 1500 + Math.random()*2500,
+        _taskTotal: 4 + Math.floor(Math.random()*5),
+        _tasksDone: 0,
+      };
+    }
+
+    // ============ DB → UI model ============
+    const STATUS_MAP = { idle: "idle", busy: "working", offline: "error", retired: "done", paused: "paused" };
+
+    function dbAgentToUI(row, existingAgent) {
+      const skills = row.skills ? JSON.parse(row.skills) : [];
+      const role   = skills[0] || "worker";
+      const uiId   = "a_" + row.id;
+      const prev   = existingAgent || {};
+      const dbStatus = STATUS_MAP[row.status] || "idle";
+
+      // Preserve log from previous state; we'll patch from episodic memory separately
+      return {
+        id:          uiId,
+        _dbId:       row.id,
+        name:        row.name,
+        code:        row.name.slice(0, 2).toUpperCase(),
+        role,
+        model:       "Ultron Swarm",
+        goal:        prev.goal || "Awaiting task.",
+        parent:      prev.parent || null,
+        children:    prev.children || [],
+        budget:      50000,
+        tokens:      (row.tasks_completed || 0) * 800,
+        cost:        (row.tasks_completed || 0) * 0.002,
+        apiCalls:    row.tasks_completed || 0,
+        cpu:         0,
+        mem:         0,
+        tools:       skills,
+        toolUses:    prev.toolUses || {},
+        status:      dbStatus,
+        progress:    dbStatus === "done" ? 1 : (prev.progress || 0),
+        currentTask: prev.currentTask || (dbStatus === "idle" ? "Idle — waiting for task" : "Running…"),
+        log:         prev.log || [],
+        createdAt:   (row.created_at || 0) * 1000,
+        lastActiveAt:(row.last_heartbeat || 0) * 1000,
+        successRate: row.success_rate || 0,
+        _tasksDone:  row.tasks_completed || 0,
+        _taskTotal:  Math.max(row.tasks_completed || 0, 1),
+        _nextActionAt: 0,
+        _lastTool:   prev._lastTool || null,
+      };
+    }
+
+    // ============ API polling + WebSocket ============
+
+    async function apiFetch(path, opts = {}) {
+      const r = await fetch(API + path, opts);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+
+    async function loadAgents() {
+      try {
+        const { agents: rows } = await apiFetch("/api/agents");
+        const byDbId = {};
+        for (const a of state.agents) byDbId[a._dbId] = a;
+
+        state.agents = rows.map(row => dbAgentToUI(row, byDbId[row.id]));
+        state.tokensUsed = state.agents.reduce((s, a) => s + a.tokens, 0);
+        state.cost       = state.agents.reduce((s, a) => s + a.cost, 0);
+      } catch(e) {
+        console.warn("loadAgents:", e);
+      }
+    }
+
+    async function loadMemoryForAgent(uiAgent) {
+      try {
+        const { memory } = await apiFetch(`/api/agents/${uiAgent._dbId}/memory?limit=40`);
+        uiAgent.log = memory.map(m => {
+          const data = m.data ? JSON.parse(m.data) : {};
+          const kind = m.event_type === "task_completed" ? "done"
+                     : m.event_type === "task_start"     ? "skill"
+                     : m.event_type === "skill_used"     ? "skill"
+                     : "msg";
+          const tag = data.skill || (kind === "done" ? "OK" : "EVT");
+          const text = data.task_id ? `Task #${data.task_id}` + (data.result ? ` — ${String(data.result).slice(0,60)}` : "") : m.event_type;
+          return { kind, tag, text, at: m.timestamp * 1000 };
+        });
+      } catch(e) { /* episodic memory may be empty */ }
+    }
+
+    async function pollAPI() {
+      await loadAgents();
+      // Fetch memory for open drawer
+      if (state.selectedId) {
+        const a = state.agents.find(x => x.id === state.selectedId);
+        if (a) await loadMemoryForAgent(a);
+      }
+      rebuildRoleFilter();
+      renderAll();
+      if (state.selectedId) renderDrawer();
+    }
+
+    function initWebSocket() {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+      ws.onmessage = (e) => {
+        try {
+          const ev = JSON.parse(e.data);
+          if (ev.type === "agent_spawned") {
+            state.feed.unshift({
+              kind: "spawn", actor: "swarm", agentId: "a_" + ev.id,
+              html: `spawned <span class="mono">${esc(ev.name)}</span>`,
+              at: now(),
+            });
+            loadAgents().then(() => { rebuildRoleFilter(); renderAll(); });
+          } else if (ev.type === "agent_stopped") {
+            state.feed.unshift({ kind: "error", actor: "swarm", agentId: null, html: `agent #${ev.id} retired`, at: now() });
+            loadAgents().then(() => { rebuildRoleFilter(); renderAll(); });
+          } else if (ev.type === "agent_status") {
+            const a = state.agents.find(x => x._dbId === ev.id);
+            if (a) { a.status = STATUS_MAP[ev.status] || ev.status; renderAll(); }
+          } else if (ev.type === "task_posted") {
+            state.feed.unshift({
+              kind: "skill", actor: "swarm", agentId: null,
+              html: `task <span class="mono">#${ev.id}</span> posted — ${esc(String(ev.description).slice(0,60))}`,
+              at: now(),
+            });
+            renderFeed();
+          }
+        } catch(e) { /* ignore */ }
+      };
+
+      ws.onclose = () => setTimeout(initWebSocket, 3000);
+    }
+
+    // ============ Rendering ============
+    const grid = $("#agent-grid");
+    const empty = $("#empty");
+
+    function statusVar(s) { return STATUS_COLORS[s] || "var(--idle)"; }
+
+    function renderAgents() {
+      const filtered = state.agents.filter(a => {
+        if (state.filter !== "all" && a.status !== state.filter) return false;
+        if (state.roleFilter !== "all" && a.role !== state.roleFilter) return false;
+        return true;
+      });
+      grid.classList.toggle("agent-list", state.view === "list");
+      grid.classList.toggle("agent-grid", state.view === "grid");
+      grid.innerHTML = "";
+
+      if (filtered.length === 0) {
+        empty.hidden = false;
+      } else {
+        empty.hidden = true;
+      }
+
+      for (const a of filtered) {
+        const pulse = a.status === "working" ? "pulsing" : "";
+        const pct = Math.round(a.progress * 100);
+        const card = document.createElement("div");
+        card.className = "agent-card" + (state.selectedId === a.id ? " selected" : "");
+        card.style.setProperty("--accent-status", statusVar(a.status));
+        card.dataset.agentId = a.id;
+        card.innerHTML = `
+          <div class="ac-head">
+            <div class="ac-avatar">${esc(a.code)}</div>
+            <div class="ac-id">
+              <div class="ac-name">${esc(a.name)}</div>
+              <div class="ac-role">
+                <span class="role-tag">${esc(a.role)}</span>
+                <span style="color: var(--text-faint); font-size: 11px;">${esc(a.model.split(" · ")[0])}</span>
+              </div>
+            </div>
+            <div class="ac-status ${pulse}" style="color: ${statusVar(a.status)};">
+              <span class="status-dot"></span>${STATUS_LABEL[a.status]}
+            </div>
+          </div>
+          <div class="ac-task">${esc(a.currentTask)}</div>
+          <div class="ac-progress"><div class="ac-progress-fill" style="width:${pct}%"></div></div>
+          <div class="ac-meta">
+            <span class="ac-meta-item" data-tip="Uptime"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>${uptime(now()-a.createdAt)}</span>
+            <span class="ac-meta-item" data-tip="Tokens used"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M3 12h6M15 12h6M12 3v6M12 15v6"/></svg>${fmt(a.tokens)}</span>
+            <span class="ac-meta-item" data-tip="Tool calls"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 2l-3 7h5l-3 7"/></svg>${a.apiCalls}</span>
+            <span style="margin-left:auto;color: var(--text-secondary);font-family:var(--mono);">${pct}%</span>
+          </div>
+        `;
+        grid.appendChild(card);
+      }
+    }
+
+    function renderMetrics() {
+      $("#m-total").textContent = state.agents.length;
+      $("#m-active").textContent = state.agents.filter(a => a.status === "working").length;
+      $("#m-tokens").textContent = fmt(state.tokensUsed);
+      $("#m-cost").textContent = "$" + state.cost.toFixed(2);
+    }
+
+    // ---- Topology ----
+    const topoSvg = $("#topo-svg");
+    function renderTopology() {
+      const W = 320, H = 200;
+      const nodes = state.agents.map((a, i) => ({ a }));
+      // simple deterministic layout: parents centered, children fanned below
+      const roots = state.agents.filter(a => !a.parent);
+      const layers = [];
+      function layout(list, depth) {
+        if (!layers[depth]) layers[depth] = [];
+        for (const a of list) {
+          layers[depth].push(a);
+          const kids = state.agents.filter(x => x.parent === a.id);
+          if (kids.length) layout(kids, depth+1);
+        }
+      }
+      layout(roots, 0);
+      // Also place orphans on top layer
+      const placed = new Set(layers.flat().map(a=>a.id));
+      const orphans = state.agents.filter(a => !placed.has(a.id));
+      if (orphans.length) layers[0] = (layers[0]||[]).concat(orphans);
+
+      const pos = {};
+      const layerH = H / Math.max(1, layers.length);
+      layers.forEach((layer, li) => {
+        const y = layerH * (li + 0.5);
+        layer.forEach((a, i) => {
+          const x = (W / (layer.length+1)) * (i+1);
+          pos[a.id] = { x, y };
+        });
+      });
+
+      // Build SVG
+      let svg = "";
+      // edges
+      for (const a of state.agents) {
+        if (a.parent && pos[a.parent] && pos[a.id]) {
+          const p = pos[a.parent], c = pos[a.id];
+          const isActive = (a.status === "working" || state.agents.find(x=>x.id===a.parent)?.status === "working");
+          svg += `<path class="topo-edge ${isActive ? "active" : ""}" d="M${p.x} ${p.y} C ${p.x} ${(p.y+c.y)/2}, ${c.x} ${(p.y+c.y)/2}, ${c.x} ${c.y}"/>`;
+        }
+      }
+      // nodes
+      for (const a of state.agents) {
+        if (!pos[a.id]) continue;
+        const p = pos[a.id];
+        const color = statusVar(a.status);
+        const r = state.selectedId === a.id ? 11 : 9;
+        svg += `
+          <g class="topo-node" data-agent-id="${a.id}" transform="translate(${p.x},${p.y})">
+            <circle r="${r+4}" fill="${color}" fill-opacity="0.15"/>
+            <circle r="${r}" fill="var(--bg-card)" stroke="${color}" stroke-width="${state.selectedId === a.id ? 2 : 1.5}"/>
+            <text y="3" text-anchor="middle" font-size="9" font-family="ui-monospace,monospace" fill="${color}" font-weight="600">${esc(a.code)}</text>
+            <title>${esc(a.name)} · ${a.status}</title>
+          </g>
+        `;
+      }
+      topoSvg.innerHTML = svg;
+    }
+
+    // ---- Feed ----
+    const feedEl = $("#feed");
+    function renderFeed() {
+      feedEl.innerHTML = "";
+      const items = state.feed.slice(0, 40);
+      if (items.length === 0) {
+        feedEl.innerHTML = `<div style="text-align:center;color:var(--text-faint);font-size:11.5px;padding:24px 8px;">No activity yet.</div>`;
+        return;
+      }
+      for (const f of items) {
+        const ic = f.kind === "spawn" ? "spawn" : f.kind === "skill" ? "skill" : f.kind === "msg" ? "msg" : f.kind === "error" ? "err" : "done";
+        const icon = {
+          spawn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+          skill: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="8 8 4 12 8 16"/><polyline points="16 8 20 12 16 16"/></svg>',
+          msg:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 21l1.8-5.5A8 8 0 1 1 21 12z"/></svg>',
+          err:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+          done:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12 10 17 19 7"/></svg>',
+        }[ic];
+        const row = document.createElement("div");
+        row.className = "feed-item";
+        row.dataset.agentId = f.agentId || "";
+        row.innerHTML = `
+          <div class="feed-icon ${ic}">${icon}</div>
+          <div class="feed-body">
+            <div class="feed-actor">${esc(f.actor)}</div>
+            <div class="feed-text">${f.html}</div>
+          </div>
+          <div class="feed-time">${ago(f.at)}</div>
+        `;
+        feedEl.appendChild(row);
+      }
+    }
+
+    function addFeed(kind, actor, agentId, html) {
+      state.feed.unshift({ kind, actor, agentId, html, at: now() });
+      if (state.feed.length > 60) state.feed.length = 60;
+    }
+
+    // ============ Drawer ============
+    const drawer = $("#drawer");
+    function openDrawer(id) {
+      state.selectedId = id;
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      renderAgents();
+      renderTopology();
+      renderDrawer();
+    }
+    function closeDrawer() {
+      state.selectedId = null;
+      drawer.classList.remove("open");
+      drawer.setAttribute("aria-hidden", "true");
+      renderAgents();
+      renderTopology();
+    }
+
+    function renderDrawer() {
+      if (!state.selectedId) return;
+      const a = state.agents.find(x => x.id === state.selectedId);
+      if (!a) { closeDrawer(); return; }
+
+      $("#d-avatar").textContent = a.code;
+      $("#d-name").textContent = a.name;
+      $("#d-role").textContent = a.role;
+      $("#d-uptime").textContent = uptime(now()-a.createdAt);
+      const st = $("#d-status");
+      st.style.color = statusVar(a.status);
+      st.classList.toggle("pulsing", a.status === "working");
+      $("#d-status-text").textContent = STATUS_LABEL[a.status];
+
+      // Pause button reflects state
+      const pauseBtn = $("#d-pause");
+      pauseBtn.title = a.status === "paused" ? "Resume" : "Pause";
+      pauseBtn.innerHTML = a.status === "paused"
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
+
+      const body = $("#d-body");
+      const tab = state.detailTab;
+
+      if (tab === "overview") {
+        body.innerHTML = `
+          <div class="drawer-section">
+            <h3>Goal</h3>
+            <div class="goal-card">${esc(a.goal)}</div>
+          </div>
+          <div class="drawer-section">
+            <h3>Current task</h3>
+            <div style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;">${esc(a.currentTask)}</div>
+            <div class="progress-row">
+              <span style="color: var(--text-faint); font-size: 11px;">${a._tasksDone}/${a._taskTotal} steps</span>
+              <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(a.progress*100)}%; background: ${statusVar(a.status)};"></div></div>
+              <span class="progress-pct">${Math.round(a.progress*100)}%</span>
+            </div>
+          </div>
+          <div class="drawer-section">
+            <h3>Quick stats</h3>
+            <div class="stat-grid">
+              <div class="stat-card"><div class="lbl">Tokens used</div><div class="val">${fmt(a.tokens)}</div><div class="delta">of ${fmt(a.budget)} budget</div></div>
+              <div class="stat-card"><div class="lbl">Tool calls</div><div class="val">${a.apiCalls}</div><div class="delta up">+${Math.floor(Math.random()*3)+1} last min</div></div>
+              <div class="stat-card"><div class="lbl">Est. cost</div><div class="val">$${a.cost.toFixed(3)}</div><div class="delta">${a.model.split(" · ")[0]}</div></div>
+              <div class="stat-card"><div class="lbl">Messages</div><div class="val">${a.log.filter(l=>l.kind==="msg").length}</div><div class="delta">in/out</div></div>
+            </div>
+          </div>
+          <div class="drawer-section">
+            <h3>Recent activity</h3>
+            <div class="log">${renderLogRows(a.log.slice(-5).reverse())}</div>
+          </div>
+        `;
+      } else if (tab === "activity") {
+        body.innerHTML = `
+          <div class="drawer-section">
+            <h3>Activity log <span style="color: var(--text-faint); text-transform: none; letter-spacing: 0; font-size: 11px;">(${a.log.length} entries)</span></h3>
+            <div class="log">${renderLogRows([...a.log].reverse())}</div>
+          </div>
+        `;
+      } else if (tab === "tools") {
+        body.innerHTML = `
+          <div class="drawer-section">
+            <h3>Granted tools</h3>
+            <div class="tool-list">
+              ${a.tools.map(t => `
+                <span class="tool-tag ${a._lastTool === t ? "recent" : ""}">${esc(t)}<span class="uses">${a.toolUses[t] || 0}</span></span>
+              `).join("")}
+            </div>
+            <div class="hint" style="margin-top: 10px; color: var(--text-muted); font-size: 11.5px;">Click a tag to revoke (mock).</div>
+          </div>
+          <div class="drawer-section">
+            <h3>Most-used commands</h3>
+            <div class="log">
+              ${Object.entries(a.toolUses).sort((x,y)=>y[1]-x[1]).slice(0,6).map(([t,n]) => `
+                <div class="log-row skill">
+                  <span class="log-time">×${n}</span>
+                  <span class="log-tag">${esc(t.split(".")[0])}</span>
+                  <span class="log-msg">${esc(t)}</span>
+                </div>
+              `).join("") || `<div style="padding:10px; color: var(--text-muted); font-size: 12px;">No tool calls yet.</div>`}
+            </div>
+          </div>
+        `;
+        // wire revoke
+        body.querySelectorAll(".tool-tag").forEach(el => {
+          el.addEventListener("click", () => {
+            const name = el.firstChild.textContent;
+            a.tools = a.tools.filter(t => t !== name);
+            toast(`Revoked ${name}`);
+            renderDrawer();
+          });
+        });
+      } else if (tab === "resources") {
+        const cpu = (40 + Math.random()*30).toFixed(0);
+        const mem = (a.tokens/1000).toFixed(1);
+        body.innerHTML = `
+          <div class="drawer-section">
+            <h3>Token budget</h3>
+            <div class="progress-row">
+              <span style="color: var(--text-faint); font-size: 11px;">${fmt(a.tokens)} / ${fmt(a.budget)}</span>
+              <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100, (a.tokens/a.budget)*100).toFixed(1)}%; background: ${a.tokens/a.budget > 0.8 ? "var(--warn)" : "var(--accent)"};"></div></div>
+              <span class="progress-pct">${((a.tokens/a.budget)*100).toFixed(0)}%</span>
+            </div>
+          </div>
+          <div class="drawer-section">
+            <h3>Runtime</h3>
+            <div class="stat-grid">
+              <div class="stat-card"><div class="lbl">CPU</div><div class="val">${cpu}%</div><div class="delta">user time</div></div>
+              <div class="stat-card"><div class="lbl">Context</div><div class="val">${mem}KB</div><div class="delta">in memory</div></div>
+              <div class="stat-card"><div class="lbl">API calls</div><div class="val">${a.apiCalls}</div><div class="delta">since spawn</div></div>
+              <div class="stat-card"><div class="lbl">Latency p50</div><div class="val">${(800+Math.random()*1200).toFixed(0)}ms</div><div class="delta">last 10 calls</div></div>
+            </div>
+          </div>
+          <div class="drawer-section">
+            <h3>Lineage</h3>
+            <div style="font-family: var(--mono); font-size: 12px; color: var(--text-secondary); background: var(--bg-elevated); border: 1px solid var(--border-soft); border-radius: 6px; padding: 10px 12px;">
+              ${a.parent ? `Parent: <span style="color:var(--accent)">${esc(state.agents.find(x=>x.id===a.parent)?.name || "?")}</span><br>` : `Root agent<br>`}
+              Children: ${a.children.length === 0 ? "none" : a.children.map(c => `<span style="color:var(--accent)">${esc(state.agents.find(x=>x.id===c)?.name || "?")}</span>`).join(", ")}
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    function renderLogRows(rows) {
+      if (!rows.length) return `<div style="padding:10px; color: var(--text-muted); font-size: 12px;">No entries.</div>`;
+      return rows.map(r => `
+        <div class="log-row ${r.kind}">
+          <span class="log-time">${new Date(r.at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit"})}</span>
+          <span class="log-tag">${esc((r.tag||r.kind).slice(0,4))}</span>
+          <span class="log-msg">${esc(r.text)}</span>
+        </div>
+      `).join("");
+    }
+
+    // ============ Toast ============
+    function toast(msg, ms = 1800) {
+      const el = $("#toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.remove("show"), ms);
+    }
+
+    // ============ Spawn modal ============
+    function openSpawn() {
+      const scrim = $("#spawn-scrim");
+      // Build role grid
+      const rg = $("#f-roles"); rg.innerHTML = "";
+      let activeRole = "researcher";
+      ROLES.forEach(r => {
+        const opt = document.createElement("div");
+        opt.className = "role-opt" + (r.id === activeRole ? " selected" : "");
+        opt.dataset.role = r.id;
+        opt.innerHTML = `<span class="role-icon" style="display:grid;place-items:center;">${r.icon}</span><span><div style="color:var(--text-primary);font-weight:500;">${r.name}</div><div style="color:var(--text-muted);font-size:10.5px;">${r.desc}</div></span>`;
+        opt.addEventListener("click", () => {
+          rg.querySelectorAll(".role-opt").forEach(x => x.classList.remove("selected"));
+          opt.classList.add("selected");
+        });
+        rg.appendChild(opt);
+      });
+      // Tools grid
+      const tg = $("#f-tools"); tg.innerHTML = "";
+      const defaultTools = new Set(["fs.read","fs.write","web.search"]);
+      TOOLS.forEach(t => {
+        const opt = document.createElement("div");
+        opt.className = "tool-opt" + (defaultTools.has(t) ? " selected" : "");
+        opt.dataset.tool = t;
+        opt.innerHTML = `<span class="tool-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="10" height="10"><polyline points="5 12 10 17 19 7"/></svg></span><span style="font-family:var(--mono);font-size:11.5px;">${t}</span>`;
+        opt.addEventListener("click", () => opt.classList.toggle("selected"));
+        tg.appendChild(opt);
+      });
+      // Parent dropdown
+      const ps = $("#f-parent");
+      ps.innerHTML = '<option value="">— None (root) —</option>' + state.agents.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join("");
+
+      $("#f-name").value = "";
+      $("#f-goal").value = "";
+
+      scrim.hidden = false;
+      setTimeout(() => $("#f-name").focus(), 50);
+    }
+    function closeSpawn() { $("#spawn-scrim").hidden = true; }
+
+    async function confirmSpawn() {
+      const name   = $("#f-name").value.trim() || undefined;
+      const skills = $$("#f-tools .tool-opt.selected").map(el => el.dataset.tool);
+      const goal   = $("#f-goal").value.trim();
+
+      const btn = $("#spawn-confirm");
+      btn.disabled = true; btn.textContent = "Spawning…";
+      try {
+        const res = await apiFetch("/api/agents/spawn", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, skills }),
+        });
+        closeSpawn();
+        // Optimistically patch goal onto the agent once it loads
+        state._pendingGoal = { id: res.id, goal };
+        toast(`Agent ${res.name} spawned`);
+        await pollAPI();
+      } catch(e) {
+        toast("Spawn failed: " + e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = "Spawn agent";
+      }
+    }
+
+    // ============ Drawer actions wired to API ============
+    function wireDrawerActions() {
+      $("#d-pause").addEventListener("click", async () => {
+        const a = state.agents.find(x => x.id === state.selectedId);
+        if (!a) return;
+        const newStatus = a.status === "paused" ? "idle" : "paused";
+        try {
+          await apiFetch(`/api/agents/${a._dbId}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: newStatus }),
+          });
+          a.status = STATUS_MAP[newStatus] || newStatus;
+          toast(newStatus === "paused" ? `Paused ${a.name}` : `Resumed ${a.name}`);
+          renderAll(); renderDrawer();
+        } catch(e) { toast("Error: " + e.message); }
+      });
+
+      $("#d-clone").addEventListener("click", async () => {
+        const a = state.agents.find(x => x.id === state.selectedId);
+        if (!a) return;
+        try {
+          const res = await apiFetch("/api/agents/spawn", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: a.name + "-clone", skills: a.tools }),
+          });
+          toast(`Cloned as ${res.name}`);
+          await pollAPI();
+        } catch(e) { toast("Clone failed: " + e.message); }
+      });
+
+      $("#d-stop").addEventListener("click", async () => {
+        const a = state.agents.find(x => x.id === state.selectedId);
+        if (!a) return;
+        if (!confirm(`Stop and remove agent "${a.name}"?`)) return;
+        try {
+          await apiFetch(`/api/agents/${a._dbId}`, { method: "DELETE" });
+          toast(`Stopped ${a.name}`);
+          closeDrawer();
+          await pollAPI();
+        } catch(e) { toast("Stop failed: " + e.message); }
+      });
+
+      $("#btn-pause-all").addEventListener("click", async () => {
+        const working = state.agents.filter(a => a.status === "working");
+        if (!working.length) { toast("Nothing to pause"); return; }
+        await Promise.all(working.map(a =>
+          apiFetch(`/api/agents/${a._dbId}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "paused" }),
+          }).catch(() => {})
+        ));
+        toast(`Paused ${working.length} agent${working.length > 1 ? "s" : ""}`);
+        await pollAPI();
+      });
+    }
+
+    // ============ Wiring ============
+    function rebuildRoleFilter() {
+      const rf = $("#role-filter");
+      const roles = Array.from(new Set(state.agents.map(a => a.role)));
+      rf.innerHTML = '<option value="all">All roles</option>' + roles.map(r => `<option value="${r}">${r}</option>`).join("");
+      rf.value = state.roleFilter;
+    }
+
+    function renderAll() {
+      renderAgents();
+      renderMetrics();
+      renderTopology();
+      renderFeed();
+    }
+
+    // Top bar buttons
+    $("#btn-spawn").addEventListener("click", openSpawn);
+
+    // Filters
+    $$(".filter-bar .chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        $$(".filter-bar .chip").forEach(c => c.classList.remove("active"));
+        chip.classList.add("active");
+        state.filter = chip.dataset.filter;
+        renderAgents();
+      });
+    });
+    $("#role-filter").addEventListener("change", (e) => {
+      state.roleFilter = e.target.value;
+      renderAgents();
+    });
+    $$(".view-toggle button").forEach(b => {
+      b.addEventListener("click", () => {
+        $$(".view-toggle button").forEach(x => x.classList.remove("active"));
+        b.classList.add("active");
+        state.view = b.dataset.view;
+        renderAgents();
+      });
+    });
+
+    // Agent grid → open drawer
+    grid.addEventListener("click", (e) => {
+      const card = e.target.closest(".agent-card");
+      if (!card) return;
+      openDrawer(card.dataset.agentId);
+    });
+
+    // Topology → open drawer
+    topoSvg.addEventListener("click", (e) => {
+      const node = e.target.closest(".topo-node");
+      if (!node) return;
+      openDrawer(node.dataset.agentId);
+    });
+
+    // Feed → open agent drawer
+    feedEl.addEventListener("click", (e) => {
+      const item = e.target.closest(".feed-item");
+      if (!item || !item.dataset.agentId) return;
+      openDrawer(item.dataset.agentId);
+    });
+
+    // Spawn modal
+    $("#spawn-close").addEventListener("click", closeSpawn);
+    $("#spawn-cancel").addEventListener("click", closeSpawn);
+    $("#spawn-scrim").addEventListener("click", (e) => { if (e.target.id === "spawn-scrim") closeSpawn(); });
+    $("#spawn-confirm").addEventListener("click", confirmSpawn);
+
+    // Empty-state CTA
+    document.addEventListener("click", (e) => {
+      const t = e.target.closest("[data-action=\"spawn\"]");
+      if (t) openSpawn();
+    });
+
+    // Drawer
+    $("#d-close").addEventListener("click", closeDrawer);
+    $$("#d-tabs .drawer-tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        $$("#d-tabs .drawer-tab").forEach(x => x.classList.remove("active"));
+        tab.classList.add("active");
+        state.detailTab = tab.dataset.dtab;
+        renderDrawer();
+      });
+    });
+    // Topology re-layout
+    $("#topo-relayout").addEventListener("click", () => { renderTopology(); toast("Topology relaid"); });
+    $("#feed-clear").addEventListener("click", () => { state.feed = []; renderFeed(); toast("Feed cleared"); });
+
+    // Keyboard shortcuts
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        if (!$("#spawn-scrim").hidden) closeSpawn();
+        else if (drawer.classList.contains("open")) closeDrawer();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        openSpawn();
+      }
+    });
+
+    // ============ Task dispatch ============
+    $("#btn-send-task").addEventListener("click", async () => {
+      const desc  = $("#task-desc").value.trim();
+      const raw   = $("#task-skills").value;
+      const prio  = parseInt($("#task-prio").value, 10) || 0;
+      const skills = raw.split(",").map(s => s.trim()).filter(Boolean);
+      if (!desc) { toast("Enter a task description"); return; }
+      const btn = $("#btn-send-task");
+      btn.disabled = true; btn.textContent = "Sending…";
+      try {
+        const res = await apiFetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: desc, required_skills: skills, priority: prio }),
+        });
+        toast(`Task #${res.task_id} posted`);
+        $("#task-desc").value = "";
+        $("#task-skills").value = "";
+        $("#task-prio").value = "0";
+      } catch(e) {
+        toast("Error: " + e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = "Send Task";
+      }
+    });
+
+    // ============ Boot ============
+    wireDrawerActions();
+    initWebSocket();
+    pollAPI();                        // initial load
+    setInterval(pollAPI, 2000);       // live refresh every 2s
+  })();
+    </script>
+</body>
+</html>

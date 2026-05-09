@@ -201,6 +201,53 @@ End of significant session:
 
 ---
 
+## 🧱 CORTEX — MANDATORY CODING PROTOCOL
+
+Cortex is Moez's architectural awareness engine. It runs as two processes:
+- `internal_brain/mind.exe` on port 9090 (analysis engine)
+- `cortex.exe` on port 8080 (API gateway)
+
+Both must be running before any coding session. MCP server: `C:/Users/moezf/Desktop/Cortex/mcp_server.py`
+
+### The 3-step rule — NO EXCEPTIONS
+
+**Step 1 — Session start (ALWAYS):**
+Call `cortex_summary` immediately. No coding before this. It gives you:
+- Which files are most depended on (touch carefully)
+- How many rules are active
+- Whether the live watcher is running
+
+**Step 2 — Before touching any file:**
+Call `cortex_preflight` with the file path. It returns:
+- Blast radius — every file that depends on the one you're about to edit
+- Active rules you must follow
+- Symbols and purpose of the file
+
+If blast_radius is non-empty, update every file in that list in the same change. No partial updates.
+
+**Step 3 — After writing code:**
+Call `cortex_verify` with every file you modified. Only declare the task done when `passed: true`.
+
+### Other Cortex tools (use when relevant)
+- `cortex_preflight_batch` — when touching multiple files at once
+- `cortex_circular_deps` — after adding new imports, to catch cycles
+- `cortex_rescan` — force rescan after several changes
+- `cortex_add_exception` — when Moez explicitly says to break a rule (e.g. "quick demo with fake data")
+- `cortex_rules` — check active rules for this project
+- `cortex_activate_stack` — switch rule profile (fullstack / frontend-only / backend-only / python / minimal)
+
+### If Cortex is offline
+Tell Moez to run:
+```
+.\internal_brain\mind.exe C:\path\to\project
+.\cortex.exe
+```
+
+### Non-negotiable
+Cortex exists to prevent the exact mistakes AI tools make. The 3-step workflow runs on every coding task, no matter how small.
+
+---
+
 ## 📌 PERMANENT NOTES
 *(Append here when Moez says "remember X")*
 

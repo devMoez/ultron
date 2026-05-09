@@ -1,16 +1,36 @@
 # Ultron — Start Everything
-# Launches swarm, tracker dashboard, tasksync, then Ultron TUI
+# Launches Cortex, swarm, tracker dashboard, tasksync, then Ultron TUI
 
 $Root   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Venv   = Join-Path $Root "swarm\venv\Scripts\python.exe"
 $Node   = "node"
+$Cortex = "C:\Users\moezf\Desktop\Cortex"
 
 Write-Host ""
 Write-Host "  ULTRON - STARTING ALL SERVICES" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. Swarm orchestrator + agents
-Write-Host "  [1] Starting Swarm..." -ForegroundColor Yellow
+# 0. Cortex (architectural awareness engine — must be up before coding starts)
+Write-Host "  [0] Starting Cortex..." -ForegroundColor Magenta
+Start-Process -FilePath "$Cortex\internal_brain\mind.exe" `
+    -ArgumentList "$Cortex" `
+    -WorkingDirectory $Cortex `
+    -WindowStyle Minimized
+Start-Sleep -Seconds 1
+Start-Process -FilePath "$Cortex\cortex.exe" `
+    -WorkingDirectory $Cortex `
+    -WindowStyle Minimized
+Start-Sleep -Seconds 1
+Write-Host "        Cortex live on http://localhost:8080" -ForegroundColor DarkMagenta
+
+# 1. True Swarm (blackboard engine on port 8000)
+Write-Host "  [1] Starting True Swarm..." -ForegroundColor Yellow
+Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$Root\swarm\true_swarm\start.ps1`"" -WindowStyle Minimized
+
+Start-Sleep -Seconds 2
+
+# 1b. Pipeline Swarm (legacy orchestrator on port 5000)
+Write-Host "  [1b] Starting Pipeline Swarm..." -ForegroundColor Yellow
 Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$Root\swarm\start.ps1`"" -WindowStyle Minimized
 
 Start-Sleep -Seconds 2
