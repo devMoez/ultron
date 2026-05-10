@@ -635,6 +635,174 @@ def cancel_session(session_id: str):
     return session_manager.cancel_session(session_id)
 
 
+# ── UI API bridge (the SPA at swarm/ui/ calls /api/* paths) ─────────────────
+
+@app.get("/api/agents")
+def ui_api_agents():
+    """Return agents in the format the swarm UI expects (bridges from /status data)."""
+    agents_list = []
+    with get_connection() as conn:
+        rows = conn.execute("SELECT * FROM agents ORDER BY id DESC").fetchall()
+        for row in rows:
+            d = dict(row)
+            d["skills"] = json.dumps(_AGENT_SKILLS.get(d["name"], ["worker"]))
+            d["tasks_completed"] = 0
+            d["created_at"] = d.get("last_heartbeat") or 0
+            d["success_rate"] = 0
+            agents_list.append(d)
+    # Fallback: if DB is empty but agent_processes has entries, synthesize them
+    if not agents_list:
+        idx = 0
+        with _lock:
+            for name, proc in agent_processes.items():
+                alive = proc.poll() is None
+                idx += 1
+                agents_list.append({
+                    "id": idx,
+                    "name": name,
+                    "status": "idle" if alive else "offline",
+                    "last_heartbeat": agent_last_heartbeat.get(name) or 0,
+                    "port": AGENT_PORTS.get(name, 0),
+                    "pid": proc.pid if alive else None,
+                    "skills": json.dumps(_AGENT_SKILLS.get(name, ["worker"])),
+                    "tasks_completed": 0,
+                    "created_at": 0,
+                    "success_rate": 0,
+                })
+    return {"agents": agents_list}
+
+
+@app.get("/api/agents/{agent_id}/memory")
+def ui_api_agent_memory(agent_id: int):
+    """Return agent memory (stub — returns empty for now)."""
+    return {"memory": []}
+
+
+@app.post("/api/agents/spawn")
+def ui_api_agent_spawn(payload: dict):
+    """Spawn a new agent via the UI."""
+    skills = (payload or {}).get("skills") or payload.get("required_skills", [])
+    if not skills:
+        return {"ok": False, "error": "skills list required"}
+    name = payload.get("name", f"agent_{int(time.time())}")
+    port = 0
+    # Check if this is a known agent with a script; if not, register virtually
+    if name in AGENT_SCRIPTS:
+        proc = _spawn_agent(name)
+    else:
+        # Virtual agent — just register it in the DB without a subprocess
+        proc = None
+        if shared_registry:
+            shared_registry.register(name, skills, port, spawned=True)
+        log.info(f"UI spawned virtual agent {name!r} (skills={skills})")
+    with _lock:
+        agent_processes[name] = proc if proc else None
+        agent_last_heartbeat[name] = time.time()
+        agent_missed[name] = 0
+        agent_retries[name] = 0
+    # Insert into DB
+    try:
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO agents(name,status,port,pid,last_heartbeat) VALUES(?,?,?,?,?)",
+                (name, "idle", port, proc.pid, time.time()),
+            )
+    except Exception as e:
+        log.warning(f"DB insert for agent {name} failed: {e}")
+    agent_id = proc.pid if proc else int(time.time() * 1000) % 1000000
+    _push_update("agent_spawned", {"id": agent_id, "name": name, "skills": skills})
+    return {"ok": True, "id": agent_id, "name": name}
+
+
+@app.post("/api/agents/{name}/status")
+@app.patch("/api/agents/{name}/status")
+@app.post("/api/agents/{agent_id}/status")
+@app.patch("/api/agents/{agent_id}/status")
+def ui_api_agent_status(name: str = "", agent_id: str = "", payload: dict = {}):
+    """Toggle agent status (pause/resume from UI)."""
+    agent_name = name or agent_id
+    # If numeric, resolve from DB
+    if agent_name.isdigit():
+        try:
+            with get_connection() as conn:
+                row = conn.execute("SELECT name FROM agents WHERE id=?", (int(agent_name),)).fetchone()
+                if row:
+                    agent_name = row["name"]
+        except Exception:
+            pass
+    new_status = (payload or {}).get("status", "idle")
+    log.info(f"UI set agent {agent_name} status -> {new_status}")
+    return {"ok": True}
+
+
+@app.delete("/api/agents/{name}")
+@app.delete("/api/agents/{agent_id}")
+def ui_api_agent_kill(name: str = "", agent_id: str = ""):
+    """Kill an agent from the UI."""
+    agent_name = name or agent_id
+    # If numeric, resolve from DB
+    if agent_name.isdigit():
+        try:
+            with get_connection() as conn:
+                row = conn.execute("SELECT name FROM agents WHERE id=?", (int(agent_name),)).fetchone()
+                if row:
+                    agent_name = row["name"]
+        except Exception:
+            pass
+    """Kill an agent from the UI."""
+    with _lock:
+        proc = agent_processes.pop(name, None)
+        agent_last_heartbeat.pop(name, None)
+        agent_missed.pop(name, None)
+        agent_retries.pop(name, None)
+    if proc and proc.poll() is None:
+        proc.terminate()
+        log.info(f"Agent {name} killed by UI")
+    try:
+        with get_connection() as conn:
+            conn.execute("UPDATE agents SET status='retired' WHERE name=?", (name,))
+    except Exception:
+        pass
+    _push_update("agent_stopped", {"id": name})
+    return {"ok": True, "message": f"Agent {name} terminated"}
+
+
+@app.post("/api/tasks")
+def ui_api_submit_task(payload: dict):
+    """Submit a task from the UI (bridges to /submit logic)."""
+    description = (payload or {}).get("description", "").strip()
+    if not description:
+        return {"ok": False, "error": "description is required"}
+    required_skills = (payload or {}).get("required_skills", [])
+    target_agent = payload.get("target_agent")
+    if not target_agent and required_skills:
+        # Map first skill to an agent name
+        primary = required_skills[0].lower()
+        for agent_name, skills in _AGENT_SKILLS.items():
+            if primary in [s.lower() for s in skills]:
+                target_agent = agent_name
+                break
+    if not target_agent:
+        target_agent = "planner"
+    # Write task to queue
+    import uuid as _uuid
+    task_id = _uuid.uuid4().hex[:8]
+    task_file = TASKS_QUEUE / f"{time.time():.6f}_{task_id}.json"
+    TASKS_QUEUE.mkdir(parents=True, exist_ok=True)
+    task_file.write_text(
+        json.dumps({
+            "description": description,
+            "target_agent": target_agent,
+            "project_path": payload.get("project_path", ""),
+            "skills": required_skills,
+        }),
+        encoding="utf-8",
+    )
+    log.info(f"UI submitted task [{task_id}] → {target_agent}: {description[:60]}")
+    _push_update("task_posted", {"id": task_id, "description": description})
+    return {"ok": True, "task_id": task_id, "target_agent": target_agent}
+
+
 # ── Git rollback ──────────────────────────────────────────────────────────────
 
 def _git_rollback(project_path: str | None) -> None:
