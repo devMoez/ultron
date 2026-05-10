@@ -90,7 +90,7 @@ agent_retries: dict[str, int] = {}
 _lock = threading.Lock()
 
 AGENT_SCRIPTS = {
-    name: SWARM_ROOT / "agents" / f"{name}.py"
+    name: SWARM_ROOT / "agents" / "agent_runner.py"
     for name in AGENT_PORTS
 }
 
@@ -825,9 +825,16 @@ def _git_rollback(project_path: str | None) -> None:
 def _spawn_agent(name: str) -> subprocess.Popen:
     script = AGENT_SCRIPTS[name]
     log_file = open(LOGS_DIR / f"{name}.log", "a", encoding="utf-8")
-    env = {**os.environ, "ORCHESTRATOR_URL": f"http://127.0.0.1:{ORCHESTRATOR_PORT}"}
+    port = AGENT_PORTS.get(name, 0)
+    # Use environment override if set (swarm.ps1 passes SWARM_PORT=8000),
+    # otherwise fall back to the config value
+    actual_port = os.environ.get("SWARM_PORT", str(ORCHESTRATOR_PORT))
+    env = {**os.environ,
+           "ORCHESTRATOR_URL": f"http://127.0.0.1:{actual_port}",
+           "AGENT_NAME": name,
+           "AGENT_PORT": str(port)}
     proc = subprocess.Popen(
-        [AGENT_PYTHON, str(script)],
+        [AGENT_PYTHON, str(script), "--name", name, "--port", str(port)],
         stdout=log_file,
         stderr=log_file,
         env=env,

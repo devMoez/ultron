@@ -30,9 +30,10 @@ if ($existing) {
     Start-Sleep -Seconds 1
 }
 
-# Start orchestrator in background
+# Start orchestrator in background with env var so agents report to correct port
 $logFile = Join-Path $SwarmDir "orchestrator.log"
 $errFile = Join-Path $SwarmDir "orchestrator_err.log"
+$env:SWARM_PORT = "8000"
 $proc = Start-Process -FilePath $Python `
     -ArgumentList "-m uvicorn orchestrator:app --host 127.0.0.1 --port 8000 --log-level warning" `
     -WorkingDirectory $SwarmDir `
