@@ -21,7 +21,28 @@ const localDistDir = (() => {
 })()
 
 const DEFAULT_CSP =
-  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
+  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
+
+// Local custom UI override for `ultron web`.
+const workspaceCustomUI = (() => {
+  try {
+    const here = fileURLToPath(import.meta.url)
+    return path.resolve(path.dirname(here), "../static/ultron-ui.html")
+  } catch {
+    return null
+  }
+})()
+const downloadsCustomUI = "C:/Users/moezf/Downloads/Ultron UI.html"
+
+async function resolveCustomUIPath(): Promise<string | null> {
+  if (workspaceCustomUI) {
+    const exists = await fs.access(workspaceCustomUI).then(() => true).catch(() => false)
+    if (exists) return workspaceCustomUI
+  }
+  const exists = await fs.access(downloadsCustomUI).then(() => true).catch(() => false)
+  if (exists) return downloadsCustomUI
+  return null
+}
 
 const NOT_BUILT_HTML = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
@@ -41,6 +62,17 @@ export const UIRoutes = (): Hono =>
   new Hono().all("/*", async (c) => {
     const embeddedWebUI = await embeddedUIPromise
     const reqPath = c.req.path
+
+    // 0. Explicit local override — useful during UI iteration.
+    // Serves the workspace-managed copy or Downloads path at `/` when present.
+    if (reqPath === "/" || reqPath === "/index.html") {
+      const customUIPath = await resolveCustomUIPath()
+      if (customUIPath) {
+        c.header("Content-Type", "text/html")
+        c.header("Content-Security-Policy", DEFAULT_CSP)
+        return c.body(new Uint8Array(await fs.readFile(customUIPath)))
+      }
+    }
 
     // 1. Embedded binary (compiled release)
     if (embeddedWebUI) {

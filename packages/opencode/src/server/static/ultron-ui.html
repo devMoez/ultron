@@ -1,0 +1,1958 @@
+<!doctype html>
+<!--
+  ============================================================================
+  ULTRON UI — Integration contract for Claude Code
+  ============================================================================
+  This file is the static design. All interactive elements are tagged with
+  stable `id` and `data-action` attributes so logic can be wired up without
+  reading layout. The bottom <script> block exposes a single `Ultron` object
+  with named handler stubs — fill those in, do NOT rewire selectors.
+
+  STATE you'll need to manage (suggested shape):
+    {
+      activeTab: 'chat' | 'code' | 'cowork' | 'swarm',
+      sidebarCollapsed: boolean,
+      currentChatId: string | null,
+      chats: { id, title, createdAt, messages: [{role, content, ts}] }[],
+      composer: { text, agent, model, mode },
+      cwd: string,                         // shown in header pill
+      branch: { name, kind, lastModified } // shown in hero
+    }
+
+  KEY DOM HOOKS (selectors are stable — safe to query):
+    Sidebar:
+      #btn-sidebar-toggle             data-action="sidebar:toggle"
+      #btn-search                     data-action="search:open"   (also Ctrl+K)
+      #btn-back / #btn-forward        data-action="history:back|forward"
+      #tab-chat | #tab-code | #tab-cowork | #tab-swarm
+                                       data-action="tab:switch" data-tab="..."
+      #nav-new-chat                   data-action="chat:new"
+      #nav-projects | #nav-artifacts | #nav-customize
+                                       data-action="nav:open"  data-target="..."
+      #recent-chats-list              container — render <a class="recent-item"> children
+      #btn-load-more                  data-action="recent:load-more"
+      #user-row                       data-action="user:menu"
+      .qi[data-tool]                  toolbar shortcuts (server, terminal, files, folder)
+
+    Header pill:
+      #hp-search                      data-action="search:open"
+      #hp-copy                        data-action="path:copy"
+      #hp-path-text                   .textContent = cwd  (update when cwd changes)
+
+    Hero:
+      #hero-title  / #hero-branch / #hero-last-modified
+      Hide #hero when activeTab !== 'chat' OR when chat has messages.
+
+    Composer:\n      #composer-input                 textarea\n      #btn-attach                     data-action=\"composer:attach\"\n      #btn-agent      (label #lbl-agent)   data-action=\"menu:agent\"\n      #btn-model      (label #lbl-model)   data-action=\"menu:model\"\n      #btn-mode       (label #lbl-mode)    data-action=\"menu:mode\"\n      #btn-send                       data-action=\"composer:send\"  (also Enter)\n      #messages                       message list container — append bubbles here\n\n    Per-message / per-chat actions (rendered by renderMessages / renderRecent):\n      data-action=\"msg:pin\"   data-msg-index    toggle pin on a message\n      data-action=\"msg:copy\"  data-msg-index    copy a message body to clipboard\n      data-action=\"chat:pin\"  data-chat-id      toggle pin on a chat (pinned chats float to top)
+
+    Dropdown menus:
+      #dropdown                       shared <div class="dropdown"> portal — call
+                                      Ultron.openMenu(anchorEl, items, onPick)
+
+    Toast:
+      #toast                          call Ultron.toast('Copied!') to flash it
+
+    Command palette:
+      #cmdk                           hidden by default; .show() / .hide()
+      #cmdk-input                     bound input; #cmdk-results = result list
+
+  EVENTS you should dispatch on `document` after state changes
+  (handy for keeping UI bits in sync without prop drilling):
+      'ultron:tab-changed'         detail: { tab }
+      'ultron:chat-updated'        detail: { chatId }
+      'ultron:composer-changed'    detail: { agent, model, mode }
+
+  STREAMING REPLIES:
+    In Ultron.handlers['composer:send'] — append a user bubble immediately,
+    then create an assistant bubble whose .textContent you mutate as tokens
+    arrive. Use whatever streaming API your backend exposes; this file is
+    framework-agnostic.
+  ============================================================================
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Ultron — Build anything</title>
+<meta name="viewport" content="width=1365, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* Warm graphite palette with copper accent */
+    --bg-main: #15140f;
+    --bg-main-grad: radial-gradient(1200px 600px at 50% -10%, #211e17 0%, #15140f 60%);
+    --bg-sidebar: #100f0c;
+    --bg-elevated: #1c1a15;
+    --bg-input: #1a1813;
+    --bg-pill: #181611;
+    --border: #2c2820;
+    --border-soft: #221f19;
+    --text-primary: #ece7dc;
+    --text-secondary: #a8a294;
+    --text-muted: #76716a;
+    --text-faint: #565148;
+    --accent: #d49a5c;
+    --accent-soft: #b07a3c;
+    --accent-blue: #d49a5c;
+    --accent-blue-soft: #b07a3c;
+    --green-dot: #7cc28a;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-main);
+    background-image: var(--bg-main-grad);
+    color: var(--text-primary);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 345px 1fr;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-soft);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .sb-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px 8px;
+  }
+  .sb-top-left, .sb-top-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .icon-btn {
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 0;
+    border-radius: 5px;
+    cursor: pointer;
+    padding: 0;
+  }
+  .icon-btn:hover { background: #222; color: var(--text-primary); }
+  .icon-btn svg { width: 15px; height: 15px; }
+
+  .search-row {
+    margin: 2px 10px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 4px;
+  }
+  .search-label {
+    color: var(--text-muted);
+    font-size: 12.5px;
+  }
+  .kbd {
+    color: var(--text-faint);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
+
+  .quick-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px 10px;
+  }
+  .copy-path {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--accent-blue);
+    font-size: 12.5px;
+    font-weight: 500;
+    padding: 4px 6px;
+    border-radius: 5px;
+  }
+  .copy-path svg { width: 13px; height: 13px; }
+  .quick-icons {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+  }
+  .qi {
+    width: 28px; height: 24px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-muted);
+    border-radius: 5px;
+    position: relative;
+  }
+  .qi:hover { background: #222; color: var(--text-secondary); }
+  .qi svg { width: 16px; height: 16px; }
+  .qi .dot {
+    position: absolute;
+    top: 3px; right: 3px;
+    width: 6px; height: 6px;
+    background: var(--green-dot);
+    border-radius: 50%;
+    box-shadow: 0 0 0 1.5px var(--bg-sidebar);
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 10px 8px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 9px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease, padding 140ms ease;
+  }
+  .tab svg { width: 13px; height: 13px; flex-shrink: 0; }
+  .tab .tab-label {
+    max-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    opacity: 0;
+    transition: max-width 180ms ease, opacity 140ms ease, margin 140ms ease;
+    margin-left: 0;
+  }
+  .tab:hover { color: var(--text-secondary); background: rgba(255,255,255,0.025); }
+  .tab:hover .tab-label,
+  .tab.active .tab-label {
+    max-width: 80px;
+    opacity: 1;
+    margin-left: 2px;
+  }
+  .tab.active {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+  }
+
+  /* Nav list */
+  .nav {
+    padding: 10px 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .nav-item:hover { background: #1d1d1d; color: var(--text-primary); }
+  .nav-item svg { width: 14px; height: 14px; color: var(--accent-blue); flex-shrink: 0; }
+  .nav-item .new-chat-icon { color: var(--accent-blue); }
+
+  .section-label {
+    color: var(--text-faint);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 16px 14px 6px;
+    text-transform: uppercase;
+  }
+
+  .recent {
+    padding: 0 8px;
+    display: flex;
+    flex-direction: column;
+  }
+  .load-more {
+    padding: 7px 14px;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  .load-more:hover { background: #1d1d1d; color: var(--text-secondary); }
+
+  .sb-spacer { min-height: 8px; }
+
+  #recent-chats-list { overflow-y: auto; flex: 1 1 0; min-height: 0; max-height: 100%; }
+  #recent-chats-list::-webkit-scrollbar { width: 5px; }
+  #recent-chats-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .cross-tab {
+    padding: 10px 14px 12px;
+    border-top: 1px solid var(--border-soft);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+  .cross-tab svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 2px; color: var(--text-faint); }
+  .cross-tab .mention { color: var(--text-secondary); }
+
+  .user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border-soft);
+    cursor: pointer;
+  }
+  .user-row:hover { background: #181818; }
+  .user-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .avatar {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #d97757, #b85a3d);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .user-name { color: var(--text-primary); font-size: 13px; font-weight: 500; }
+  .user-row .chev { color: var(--text-muted); }
+  .user-row .chev svg { width: 14px; height: 14px; }
+
+  /* ---------- Main ---------- */
+  .main {
+    position: relative;
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* Subtle centered header bar */
+  .main-header {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border-soft);
+    background: linear-gradient(to bottom, rgba(255,255,255,0.012), transparent);
+  }
+  .header-pill {
+    display: inline-flex;
+    align-items: stretch;
+    height: 30px;
+    background: var(--bg-pill);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset, 0 1px 2px rgba(0,0,0,0.25);
+  }
+  .hp-search {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px 0 12px;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    cursor: text;
+    min-width: 230px;
+  }
+  .hp-search svg { width: 13px; height: 13px; color: var(--text-muted); }
+  .hp-search .hp-label { color: var(--text-muted); }
+  .hp-search .hp-kbd {
+    margin-left: auto;
+    color: var(--text-faint);
+    font-size: 10.5px;
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    padding: 1px 5px;
+    background: rgba(255,255,255,0.015);
+  }
+  .hp-divider { width: 1px; background: var(--border); }
+  .hp-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    color: var(--accent);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .hp-copy:hover { background: rgba(212,154,92,0.06); }
+  .hp-copy svg { width: 13px; height: 13px; }
+  .hp-copy .hp-path {
+    color: var(--text-secondary);
+    font-weight: 400;
+  }
+  .hp-copy .hp-path .accent { color: var(--accent); font-weight: 500; }
+
+  .hero {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 20px;
+    gap: 14px;
+    transform: translateY(-40px);
+  }
+  .hero-mark {
+    width: 50px;
+    height: 50px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
+  }
+  .hero-mark svg { width: 100%; height: 100%; }
+
+  .hero-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .hero-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .hero-path {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .hero-path .accent { color: var(--accent); }
+  .hero-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+  }
+  .hero-row svg { width: 12px; height: 12px; color: var(--text-muted); }
+  .hero-row strong { color: var(--text-primary); font-weight: 600; }
+  .hero-row .branch-name { color: var(--text-primary); font-weight: 500; }
+
+  /* Composer */
+  .composer-wrap {
+    position: absolute;
+    left: 50%;
+    bottom: 32px;
+    transform: translateX(-50%);
+    width: 777px;
+    max-width: calc(100% - 100px);
+  }
+  .composer {
+    background: var(--bg-input);
+    border: 1px solid #2c2c2c;
+    border-radius: 10px;
+    padding: 12px 14px 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  }
+  .composer-input {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    outline: none;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    resize: none;
+    padding: 4px 2px 14px;
+    min-height: 22px;
+  }
+  .composer-input::placeholder { color: var(--text-faint); }
+
+  .composer-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .cb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: 0;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 12.5px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .cb-btn:hover { background: #232323; color: var(--text-primary); }
+  .cb-btn svg { width: 13px; height: 13px; color: var(--text-muted); }
+  .cb-btn .chev { width: 11px; height: 11px; opacity: 0.7; }
+  .cb-plus {
+    width: 26px; height: 26px;
+    padding: 0;
+    justify-content: center;
+    color: var(--text-muted);
+  }
+  .cb-plus svg { width: 14px; height: 14px; }
+
+  .cb-spacer { flex: 1; }
+
+  .send-btn {
+    width: 28px; height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #2a2a2a;
+    border: 1px solid #353535;
+    border-radius: 6px;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .send-btn:hover { background: #333; }
+  .send-btn svg { width: 14px; height: 14px; }
+
+  .divider {
+    height: 1px;
+    background: var(--border-soft);
+  }
+
+  /* ============ PORTAL ELEMENTS — wired by Ultron.* helpers ============ */
+
+  /* Sidebar collapse: handler toggles .sidebar-collapsed on .app.
+     We can't use display:none on .sidebar — grid would re-flow .main into
+     the 0px column. Instead, zero its width and hide overflow. */
+  .app.sidebar-collapsed { grid-template-columns: 0 1fr; }
+  .app.sidebar-collapsed .sidebar {
+    overflow: hidden;
+    border-right: 0;
+    pointer-events: none;
+  }
+
+  /* Floating expand button — only visible when the sidebar is collapsed.
+     Lives outside .sidebar so the user can re-expand from anywhere. */
+  .floating-sidebar-toggle {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 80;
+    width: 32px;
+    height: 32px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: 7px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease;
+  }
+  .floating-sidebar-toggle:hover { background: #1d1a14; color: var(--text-primary); }
+  .floating-sidebar-toggle svg { width: 16px; height: 16px; }
+  .app.sidebar-collapsed ~ .floating-sidebar-toggle { display: inline-flex; }
+
+  /* Recent chat row (handler renders these into #recent-chats-list) */
+  .recent-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px 7px 14px;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  .recent-item .ri-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .recent-item:hover { background: #1d1a14; color: var(--text-primary); }
+  .recent-item.active { background: var(--bg-elevated); color: var(--text-primary); }
+  .ri-pin {
+    width: 22px; height: 22px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+    color: var(--text-faint);
+    opacity: 0;
+    transition: opacity 120ms ease, color 120ms ease;
+  }
+  .ri-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+  .ri-delete { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 4px; cursor: pointer; color: var(--text-muted); opacity: 0; transition: opacity 120ms ease; }
+  .recent-item:hover .ri-delete { opacity: 1; }
+  .ri-delete:hover { background: rgba(224,85,85,0.15); color: #e05555; }
+  .ri-delete svg { width: 13px; height: 13px; }
+  .ri-pin svg { width: 12px; height: 12px; }
+  .recent-item:hover .ri-pin { opacity: 1; }
+  .ri-pin:hover { color: var(--accent); background: rgba(212,154,92,0.1); }
+  .recent-item.pinned .ri-pin { opacity: 1; color: var(--accent); }
+
+  /* Message list */
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 80px 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .messages:empty { display: none; }
+  .msg {
+    position: relative;
+    max-width: 720px;
+    line-height: 1.55;
+    font-size: 13.5px;
+    white-space: pre-wrap;
+  }
+  .msg-user {
+    align-self: flex-end;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: var(--text-primary);
+  }
+  .msg-assistant {
+    align-self: flex-start;
+    color: var(--text-primary);
+    padding: 4px 0;
+  }
+  .msg-assistant.streaming::after {
+    content: "▍";
+    color: var(--accent);
+    animation: blink 1s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Message action toolbar (pin + copy). Hover-revealed. */
+  .msg-actions {
+    position: absolute;
+    bottom: -28px;
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .msg-user   .msg-actions { right: 4px; }
+  .msg-assistant .msg-actions { left: 0; }
+  .msg:hover .msg-actions, .msg.pinned .msg-actions { opacity: 1; }
+  .msg-act {
+    width: 24px; height: 24px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent;
+    border: 0;
+    border-radius: 5px;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .msg-act svg { width: 13px; height: 13px; }
+  .msg-act:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+  .msg.pinned .msg-act[data-action="msg:pin"] { color: var(--accent); }
+
+  /* ---- Pinned button inside the header pill ---- */
+  .hp-pin {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 14px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease;
+    border-radius: 0 999px 999px 0;
+  }
+  .hp-pin[hidden] { display: none; }
+  .hp-pin:hover { background: rgba(212,154,92,0.06); color: var(--text-primary); }
+  .hp-pin.active { color: var(--accent); background: rgba(212,154,92,0.1); }
+  .hp-pin .hp-pin-icon { width: 22px; height: 22px; }
+  .hp-pin-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 12px;
+    text-align: center;
+  }
+  .hp-pin.active .hp-pin-count { color: var(--accent); }
+
+  /* ---- Pinned popover ---- */
+  .pin-popover {
+    position: fixed;
+    z-index: 95;
+    width: 360px;
+    max-height: 50vh;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .pin-popover[hidden] { display: none; }
+  .pp-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .pp-toggle {
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 500;
+    color: var(--accent);
+    cursor: pointer;
+  }
+  .pp-toggle:hover { text-decoration: underline; }
+  .pp-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px;
+  }
+  .pp-list:empty::before {
+    content: "No pinned messages in this chat.";
+    display: block;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    padding: 18px 12px;
+    text-align: center;
+  }
+  .pp-item {
+    padding: 9px 10px;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    line-height: 1.45;
+    cursor: pointer;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .pp-item:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+  .pp-item .pp-role {
+    flex-shrink: 0;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    padding-top: 2px;
+    width: 56px;
+  }
+  .pp-item .pp-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-size: 12.5px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease, transform 180ms ease;
+    z-index: 100;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* Dropdown */
+  .dropdown {
+    position: fixed;
+    z-index: 90;
+    min-width: 200px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+    overflow: hidden;
+    padding: 4px;
+  }
+  .dropdown[hidden] { display: none; }
+  .dropdown-list { display: flex; flex-direction: column; gap: 1px; }
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 5px;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .dropdown-item:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+  .dropdown-item.selected { color: var(--accent); }
+  .dropdown-item .check { margin-left: auto; opacity: 0; }
+  .dropdown-item.selected .check { opacity: 1; }
+
+  /* Command palette */
+  .cmdk {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 110;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 14vh;
+  }
+  .cmdk[hidden] { display: none; }
+  .cmdk-card {
+    width: min(620px, 92vw);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+    overflow: hidden;
+  }
+  .cmdk-input {
+    width: 100%;
+    padding: 14px 16px;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--border-soft);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+  }
+  .cmdk-input::placeholder { color: var(--text-muted); }
+  .cmdk-results {
+    max-height: 50vh;
+    overflow-y: auto;
+    padding: 6px;
+  }
+  .cmdk-results:empty::before {
+    content: "Start typing to search…";
+    display: block;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    padding: 18px 12px;
+    text-align: center;
+  }
+  .cmdk-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .cmdk-item:hover, .cmdk-item.active {
+    background: rgba(255,255,255,0.04);
+    color: var(--text-primary);
+  }
+  .cmdk-foot {
+    display: flex;
+    gap: 18px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--border-soft);
+    color: var(--text-faint);
+    font-size: 11px;
+  }
+  .cmdk-foot kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    margin-right: 4px;
+    background: rgba(255,255,255,0.02);
+    font-family: inherit;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div class="sb-top">
+        <div class="sb-top-left">
+          <button id="btn-sidebar-toggle" data-action="sidebar:toggle" class="icon-btn" title="Toggle sidebar" aria-label="Toggle sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+          </button>
+          <button id="btn-search" data-action="search:open" class="icon-btn" title="Search (Ctrl+K)" aria-label="Search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.5" y2="16.5"/></svg>
+          </button>
+        </div>
+        <div class="sb-top-right">
+          <button id="btn-back" data-action="history:back" class="icon-btn" aria-label="Back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
+          </button>
+          <button id="btn-forward" data-action="history:forward" class="icon-btn" aria-label="Forward">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="quick-row">
+        <!-- Sidebar quick-tools row. Each .qi has data-tool="<key>". -->
+        <div class="quick-icons">
+          <span class="qi" data-tool="server" title="Server">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="7" rx="1"/><rect x="4" y="13" width="16" height="7" rx="1"/><line x1="7" y1="7.5" x2="11" y2="7.5"/><line x1="7" y1="16.5" x2="11" y2="16.5"/></svg>
+            <!-- green status dot — toggle .live class on .qi[data-tool="server"] -->
+            <span class="dot"></span>
+          </span>
+          <span class="qi" data-tool="terminal" title="Terminal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1.5"/><polyline points="8 10 11 12 8 14"/><line x1="13" y1="14.5" x2="16" y2="14.5"/></svg>
+          </span>
+          <span class="qi" data-tool="files" title="Files">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1.5"/><line x1="8" y1="12" x2="16" y2="12"/><polyline points="10 9 12 7 14 9"/><polyline points="10 15 12 17 14 15"/></svg>
+          </span>
+          <span class="qi" data-tool="folder" title="Folder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a1 1 0 0 1 1-1h4l2 2h8a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/></svg>
+          </span>
+        </div>
+      </div>
+
+      <!-- Tabs: switch the main view. Active tab is .tab.active. Each tab shows its label on hover or when active. -->
+      <div class="tabs" role="tablist">
+        <div id="tab-chat" class="tab" role="tab" data-action="tab:switch" data-tab="chat" title="Chat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 21l1.8-5.5A8 8 0 1 1 21 12z"/></svg>
+          <span class="tab-label">Chat</span>
+        </div>
+        <div id="tab-code" class="tab" role="tab" data-action="tab:switch" data-tab="code" title="Code">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 8 4 12 8 16"/><polyline points="16 8 20 12 16 16"/></svg>
+          <span class="tab-label">Code</span>
+        </div>
+        <div id="tab-cowork" class="tab active" role="tab" data-action="tab:switch" data-tab="cowork" title="Cowork">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><circle cx="17" cy="11" r="2.5"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5"/><path d="M14 17c.4-2 2.4-3 3.5-3 2 0 3.5 1.5 3.5 3.5"/></svg>
+          <span class="tab-label">Cowork</span>
+        </div>
+        <div id="tab-swarm" class="tab" role="tab" data-action="tab:switch" data-tab="swarm" title="Swarm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="8" r="2.2"/><circle cx="17" cy="8" r="2.2"/><circle cx="12" cy="14" r="2.2"/><path d="M4.5 18c.5-1.8 2.3-3 4.5-3"/><path d="M19.5 18c-.5-1.8-2.3-3-4.5-3"/><path d="M9.5 19.5c.6-1.4 1.6-2 2.5-2s1.9.6 2.5 2"/></svg>
+          <span class="tab-label">Swarm</span>
+        </div>
+      </div>
+
+      <!-- Primary nav. data-action="nav:open" + data-target tells the handler what to open. -->
+      <nav class="nav">
+        <div id="nav-new-chat" class="nav-item" data-action="chat:new">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New chat
+        </div>
+        <div id="nav-projects" class="nav-item" data-action="nav:open" data-target="projects">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          Projects
+        </div>
+        <div id="nav-artifacts" class="nav-item" data-action="nav:open" data-target="artifacts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 3 14.5 9 21 9.5 16 14 17.5 21 12 17.5 6.5 21 8 14 3 9.5 9.5 9 12 3"/></svg>
+          Artifacts
+        </div>
+        <div id="nav-customize" class="nav-item" data-action="nav:open" data-target="customize">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6-11 11H3v-6z"/></svg>
+          Customize
+        </div>
+      </nav>
+
+      <div class="section-label">Recent chats</div>
+      <!-- Render recent chats here. Each item: <div class="recent-item" data-action="chat:open" data-chat-id="...">Title</div> -->
+      <div id="recent-chats-list" class="recent">
+        <div id="btn-load-more" class="load-more" data-action="recent:load-more" style="display:none">Load more</div>
+        <div id="btn-collapse" class="load-more" data-action="recent:collapse" style="display:none">Collapse</div>
+      </div>
+
+      <div class="sb-spacer"></div>
+
+      <div class="cross-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+        <div>
+          Cross-tab context: mention <span class="mention">@chat</span> / <span class="mention">@code</span> / <span class="mention">@cowork</span> in any message
+        </div>
+      </div>
+
+      <div id="user-row" class="user-row" data-action="user:menu">
+        <div class="user-left">
+          <div class="avatar" id="user-avatar">M</div>
+          <div class="user-name" id="user-name">Moez</div>
+        </div>
+        <span class="chev">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+        </span>
+      </div>
+    </aside>
+
+    <!-- ============ MAIN ============ -->
+    <main class="main">
+      <!-- Header pill: search + cwd + pinned. All halves are clickable. -->
+      <div class="main-header">
+        <div class="header-pill">
+          <div id="hp-search" class="hp-search" data-action="search:open" role="button" tabindex="0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.5" y2="16.5"/></svg>
+            <span class="hp-label">Search opencode</span>
+            <span class="hp-kbd">Ctrl+K</span>
+          </div>
+          <div class="hp-divider"></div>
+          <div id="hp-copy" class="hp-copy" data-action="path:copy" title="Copy path" role="button" tabindex="0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+            <span id="hp-path-text" class="hp-path">C:/Users/moezf/Desktop/<span class="accent">opencode</span></span>
+          </div>
+          <div class="hp-divider"></div>
+          <!-- Pinned messages: hover → popover, click → toggle filter. -->
+          <div id="hp-pin" class="hp-pin" data-action="messages:filter-pinned" role="button" tabindex="0" hidden>
+            <!-- big-little-big pin glyph: a thicker pin head between two thin tick marks -->
+            <svg class="hp-pin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 11h2"  stroke-width="1.4"/>
+              <path d="M17 11h2" stroke-width="1.4"/>
+              <path d="M9 4h6v6l2 4H7l2-4V4z" stroke-width="2.2" fill="currentColor" fill-opacity="0.18"/>
+              <line x1="12" y1="14" x2="12" y2="21" stroke-width="2.2"/>
+            </svg>
+            <span id="hp-pin-count" class="hp-pin-count">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pinned-messages popover, anchored under #hp-pin. Populated by renderPinnedPopover(). -->
+      <div id="pin-popover" class="pin-popover" hidden>
+        <div class="pp-head">
+          <span>Pinned messages</span>
+          <span id="pp-toggle" class="pp-toggle" data-action="messages:filter-pinned">Show only pinned</span>
+        </div>
+        <div id="pp-list" class="pp-list"></div>
+      </div>
+
+      <!-- Hero: empty-state for the chat tab. Hide #hero when activeTab !== 'chat' or when current chat has messages. -->
+      <div id="hero" class="hero">
+        <div class="hero-mark" aria-hidden="true">
+          <!-- tray / inbox icon -->
+          <svg viewBox="0 0 48 48" fill="none">
+            <path d="M8 8 L8 40 L40 40 L40 8 Z" fill="#dcdcdc"/>
+            <rect x="18" y="8" width="12" height="14" fill="#2a2a2a"/>
+            <path d="M18 22 L30 22" stroke="#1a1a1a" stroke-width="1.2"/>
+          </svg>
+        </div>
+
+        <h1 id="hero-title" class="hero-title">Build anything</h1>
+
+        <div class="hero-meta">
+          <div class="hero-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 8v8"/><path d="M18 11c0 4-6 3-6 7"/></svg>
+            <span id="hero-branch" class="branch-name">Main</span>
+            <span style="color: var(--text-muted)">branch (dev)</span>
+          </div>
+          <div class="hero-row">
+            <span style="color: var(--text-muted)">Last modified</span>
+            <strong id="hero-last-modified">3 hours ago</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pinned filter chip. REMOVED — replaced by #hp-pin in the header pill. -->
+
+      <!-- Message list. When a chat has messages, render bubbles here and hide #hero.
+           Each bubble: <div class="msg msg-user|msg-assistant">...</div> -->
+      <div id="messages" class="messages" aria-live="polite"></div>
+
+      <!-- Composer. Always visible at the bottom of the main column. -->
+      <div class="composer-wrap">
+        <div class="composer">
+          <textarea id="composer-input" class="composer-input" placeholder="Ask Ultron anything…"></textarea>
+          <div class="composer-bar">
+            <button id="btn-attach" data-action="composer:attach" class="cb-btn cb-plus" title="Attach">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            <button id="btn-agent" data-action="menu:agent" class="cb-btn" title="Agent">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg>
+              <span id="lbl-agent">Ultron</span>
+              <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <button id="btn-model" data-action="menu:model" class="cb-btn" title="Model">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14"/><path d="M5 12h14"/><path d="M5 18h14"/></svg>
+              <span id="lbl-model">Nemotron 3 Super Free</span>
+              <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <button id="btn-mode" data-action="menu:mode" class="cb-btn" title="Reasoning">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/></svg>
+              <span id="lbl-mode">Medium</span>
+              <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="cb-spacer"></div>
+            <button id="btn-send" data-action="composer:send" class="send-btn" title="Send (Enter)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ FLOATING / PORTAL ELEMENTS ============ -->
+  <!-- Floating sidebar toggle: only visible when .app.sidebar-collapsed is set.
+       Shows even when the sidebar itself is hidden. -->
+  <button id="btn-sidebar-expand" class="floating-sidebar-toggle" data-action="sidebar:toggle" title="Show sidebar" aria-label="Show sidebar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+  </button>
+
+  <!-- Toast: call Ultron.toast('message') to show for ~2s. -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Dropdown portal: anchored next to a button. Populate #dropdown-list with .dropdown-item rows. -->
+  <div id="dropdown" class="dropdown" hidden>
+    <div id="dropdown-list" class="dropdown-list"></div>
+  </div>
+
+  <!-- Command palette (Ctrl+K). Hidden by default. -->
+  <div id="cmdk" class="cmdk" hidden>
+    <div class="cmdk-card">
+      <input id="cmdk-input" class="cmdk-input" placeholder="Search opencode…" autocomplete="off" />
+      <div id="cmdk-results" class="cmdk-results"></div>
+      <div class="cmdk-foot">
+        <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+        <span><kbd>↵</kbd> open</span>
+        <span><kbd>esc</kbd> close</span>
+      </div>
+    </div>
+  </div>
+  <!-- ============================================================
+       ULTRON.JS — handler stubs for Claude Code to fill in.
+       Wires every [data-action] click to a named handler. The
+       handlers below are intentionally minimal (or marked TODO).
+       Replace bodies with real logic; do NOT change handler names
+       or the dispatcher.
+       ============================================================ -->
+  <script>
+  (function () {
+    "use strict";
+
+    /** ----------------------------------------------------------------
+     *  STATE
+     *  Centralised state bag. Replace with your store of choice (Redux,
+     *  Zustand, Pinia, signals, plain proxy, etc.).
+     *  ---------------------------------------------------------------- */
+    var state = {
+      activeTab: "cowork",
+      sidebarCollapsed: false,
+      currentChatId: null,
+      chats: [],
+      composer: { text: "", agent: "Ultron", model: "Nemotron 3 Super Free", mode: "Medium" },
+      cwd: "C:/Users/moezf/Desktop/opencode",
+      branch: { name: "Main", kind: "dev", lastModified: "3 hours ago" },
+      showPinnedOnly: false,
+      healthy: false,
+      version: "0.0.0",
+      home: "",
+      worktree: "",
+      config: "",
+      abortController: null,
+      eventSource: null,
+      showAllSessions: false,
+    };
+
+    /** ----------------------------------------------------------------
+     *  DOM HELPERS
+     *  ---------------------------------------------------------------- */
+    const $  = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+    const emit = (name, detail) => document.dispatchEvent(new CustomEvent(name, { detail }));
+    const escapeHTML = (s) => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+    // Inline icon library so renderRecent/renderMessages can stamp them.
+    const ICON_PIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 11l-2 4h10l-2-4"/><path d="M9 11V4h6v7"/></svg>';
+    const ICON_PIN_FILLED = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M9 4h6v6l2 4H7l2-4V4z"/><line x1="12" y1="14" x2="12" y2="22" stroke-linecap="round"/></svg>';
+    const ICON_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+    const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+
+    /** ----------------------------------------------------------------
+     *  PUBLIC API — exposed as window.Ultron
+     *  Use these from anywhere in your codebase to drive the UI.
+     *  ---------------------------------------------------------------- */
+    const Ultron = {
+      state,
+
+      // ---- Toast ----
+      toast(message, ms = 1800) {
+        const el = $("#toast");
+        el.textContent = message;
+        el.classList.add("show");
+        clearTimeout(el._t);
+        el._t = setTimeout(() => el.classList.remove("show"), ms);
+      },
+
+      // ---- Dropdown ----
+      // items: [{ label, value, selected? }]   onPick: (item) => void
+      openMenu(anchorEl, items, onPick) {
+        const dd = $("#dropdown");
+        const list = $("#dropdown-list");
+        list.innerHTML = "";
+        items.forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "dropdown-item" + (item.selected ? " selected" : "");
+          row.innerHTML = `<span>${item.label}</span><span class="check">✓</span>`;
+          row.addEventListener("click", () => {
+            onPick && onPick(item);
+            Ultron.closeMenu();
+          });
+          list.appendChild(row);
+        });
+        const r = anchorEl.getBoundingClientRect();
+        dd.hidden = false;
+        // Position above the anchor (composer pills sit at the bottom)
+        dd.style.left = r.left + "px";
+        dd.style.top  = (r.top - dd.offsetHeight - 6) + "px";
+      },
+      closeMenu() { $("#dropdown").hidden = true; },
+
+      // ---- Command palette ----
+      openCommandPalette() {
+        $("#cmdk").hidden = false;
+        var inp = $("#cmdk-input");
+        inp.value = "";
+        inp.focus();
+        try {
+          fetch("/command").then(function (r) { return r.json(); }).then(function (commands) {
+            if (!Array.isArray(commands)) return;
+            inp._commands = commands;
+            var results = $("#cmdk-results");
+            results.innerHTML = commands.map(function (c) {
+              return '<div class="cmdk-item" data-value="' + c.name + '">' + c.name + '</div>';
+            }).join("");
+          }).catch(function () {});
+        } catch (_) {}
+      },
+      closeCommandPalette() { $("#cmdk").hidden = true; },
+
+      // ---- Tabs ----
+      setTab(tab) {
+        state.activeTab = tab;
+        $$(".tabs .tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tab));
+        // TODO: swap main view content based on tab.
+        // The hero is only meaningful on 'chat' with no messages.
+        $("#hero").style.display = (tab === "chat" && Ultron.currentMessages().length === 0) ? "" : "none";
+        emit("ultron:tab-changed", { tab });
+      },
+
+      // ---- Sidebar ----
+      toggleSidebar() {
+        state.sidebarCollapsed = !state.sidebarCollapsed;
+        $(".app").classList.toggle("sidebar-collapsed", state.sidebarCollapsed);
+      },
+
+      // ---- Chats ----
+      currentMessages() {
+        const c = state.chats.find(c => c.id === state.currentChatId);
+        return c ? c.messages : [];
+      },
+      newChat() {
+        const id = "c_" + Date.now();
+        state.chats.unshift({ id, title: "Untitled", createdAt: Date.now(), messages: [] });
+        state.currentChatId = id;
+        Ultron.renderRecent();
+        Ultron.renderMessages();
+        $("#hero").style.display = "";
+        emit("ultron:chat-updated", { chatId: id });
+      },
+      openChat(chatId) {
+        state.currentChatId = chatId;
+        Ultron.renderRecent();
+        Ultron.renderMessages();
+        emit("ultron:chat-updated", { chatId });
+      },
+      renderRecent() {
+        var list = $("#recent-chats-list");
+        // Wipe everything except the "Load more" footer.
+        $$(".recent-item", list).forEach(function (n) { n.remove(); });
+        var loadMore = $("#btn-load-more");
+        // Pinned first, then by createdAt desc.
+        var sorted = state.chats.slice().sort(function (a, b) {
+          if (!!b.pinned - !!a.pinned) return !!b.pinned - !!a.pinned;
+          return b.createdAt - a.createdAt;
+        });
+        // Only show first 5 unless "show all" is toggled
+        var showAll = state.showAllSessions || sorted.length <= 5;
+        var visible = showAll ? sorted : sorted.slice(0, 5);
+        visible.forEach(function (c) {
+          var row = document.createElement("div");
+          row.className = "recent-item"
+            + (c.id === state.currentChatId ? " active" : "")
+            + (c.pinned ? " pinned" : "");
+          row.dataset.action = "chat:open";
+          row.dataset.chatId = c.id;
+          row.innerHTML = '<span class="ri-title">' + escapeHTML(c.title || "Untitled") + '</span>'
+            + '<span class="ri-actions">'
+            + '<span class="ri-pin" data-action="chat:pin" data-chat-id="' + c.id + '" title="' + (c.pinned ? "Unpin" : "Pin") + '">'
+            + (c.pinned ? ICON_PIN_FILLED : ICON_PIN)
+            + '</span>'
+            + '<span class="ri-delete" data-action="chat:delete" data-chat-id="' + c.id + '" title="Delete session">'
+            + ICON_TRASH
+            + '</span>'
+            + '</span>';
+          list.insertBefore(row, loadMore);
+        });
+        // Show/hide load more button
+        var collapseBtn = $("#btn-collapse");
+        if (sorted.length > 5 && !showAll) {
+          loadMore.style.display = "";
+          loadMore.textContent = "Load more (" + (sorted.length - 5) + " more)";
+          if (collapseBtn) collapseBtn.style.display = "none";
+        } else if (sorted.length > 5 && showAll) {
+          loadMore.style.display = "none";
+          if (collapseBtn) {
+            collapseBtn.style.display = "";
+            collapseBtn.textContent = "Collapse (show 5)";
+          }
+        } else {
+          loadMore.style.display = "none";
+          if (collapseBtn) collapseBtn.style.display = "none";
+        }
+      },
+      renderMessages() {
+        const wrap = $("#messages");
+        wrap.innerHTML = "";
+        const all = Ultron.currentMessages();
+        const pinnedCount = all.filter(m => m.pinned).length;
+        const msgs = state.showPinnedOnly ? all.filter(m => m.pinned) : all;
+
+        msgs.forEach((m) => {
+          // We pass the index INTO ALL so handlers always reference the right message.
+          const i = all.indexOf(m);
+          const div = document.createElement("div");
+          div.className = "msg msg-" + m.role + (m.pinned ? " pinned" : "");
+          div.dataset.index = i;
+          // Body
+          const body = document.createElement("span");
+          body.className = "msg-body";
+          body.textContent = m.content;
+          div.appendChild(body);
+          // Actions
+          const acts = document.createElement("div");
+          acts.className = "msg-actions";
+          const pinTitle = m.pinned ? "Unpin" : "Pin";
+          acts.innerHTML = `
+            <button class="msg-act" data-action="msg:pin" data-msg-index="${i}" title="${pinTitle}">
+              ${m.pinned ? ICON_PIN_FILLED : ICON_PIN}
+            </button>
+            <button class="msg-act" data-action="msg:copy" data-msg-index="${i}" title="Copy">
+              ${ICON_COPY}
+            </button>
+          `;
+          div.appendChild(acts);
+          wrap.appendChild(div);
+        });
+
+        // Hide hero once a chat has any messages.
+        if (all.length > 0) $("#hero").style.display = "none";
+
+        // Update header pinned button + popover.
+        const pinBtn   = $("#hp-pin");
+        const pinCount = $("#hp-pin-count");
+        const ppToggle = $("#pp-toggle");
+        if (pinnedCount === 0) {
+          pinBtn.hidden = true;
+          state.showPinnedOnly = false; // can't filter when nothing is pinned
+          pinBtn.classList.remove("active");
+          $("#pin-popover").hidden = true;
+        } else {
+          pinBtn.hidden = false;
+          pinBtn.classList.toggle("active", state.showPinnedOnly);
+          pinCount.textContent = pinnedCount;
+          ppToggle.textContent = state.showPinnedOnly ? "Show all" : "Show only pinned";
+        }
+        Ultron.renderPinnedPopover();
+
+        wrap.scrollTop = wrap.scrollHeight;
+      },
+
+      // Render pinned messages into the hover popover. Each row jumps to the
+      // message and unfilters so the user can see surrounding context.
+      renderPinnedPopover() {
+        const list = $("#pp-list");
+        list.innerHTML = "";
+        Ultron.currentMessages().forEach((m, i) => {
+          if (!m.pinned) return;
+          const row = document.createElement("div");
+          row.className = "pp-item";
+          row.dataset.action = "pinned:jump";
+          row.dataset.msgIndex = i;
+          row.innerHTML = `
+            <span class="pp-role">${m.role === "user" ? "You" : "Ultron"}</span>
+            <span class="pp-text">${escapeHTML(m.content)}</span>
+          `;
+          list.appendChild(row);
+        });
+      },
+
+      // ---- Composer ----
+      // Append a user bubble immediately, return the assistant bubble
+      // so streaming logic can mutate its textContent.
+      appendUserMessage(text) {
+        if (!state.currentChatId) Ultron.newChat();
+        const chat = state.chats.find(c => c.id === state.currentChatId);
+        chat.messages.push({ role: "user", content: text, ts: Date.now() });
+        if (chat.messages.length === 1) chat.title = text.slice(0, 40);
+        Ultron.renderMessages();
+        Ultron.renderRecent();
+      },
+      beginAssistantMessage() {
+        const chat = state.chats.find(c => c.id === state.currentChatId);
+        const msg = { role: "assistant", content: "", ts: Date.now() };
+        chat.messages.push(msg);
+        Ultron.renderMessages();
+        const node = $("#messages").lastElementChild;
+        node.classList.add("streaming");
+        return {
+          append: (chunk) => { msg.content += chunk; node.textContent = msg.content; },
+          done:   ()      => { node.classList.remove("streaming"); }
+        };
+      },
+      // ---- Backend API integration ----
+      api: {
+        async init() {
+          try {
+            var h = await fetch("/global/health").then(function (r) { return r.json(); });
+            state.healthy = true;
+            state.version = h.version || "0.0.0";
+            $(".qi[data-tool='server']").classList.add("live");
+          } catch (_) { state.healthy = false; }
+
+          try {
+            var p = await fetch("/path").then(function (r) { return r.json(); });
+            state.cwd = p.directory || state.cwd;
+            state.home = p.home || "";
+            state.worktree = p.worktree || "";
+            state.config = p.config || "";
+            $("#hp-path-text").innerHTML = state.cwd.replace(/(opencode)$/, '<span class="accent">$1</span>');
+          } catch (_) {}
+
+          try {
+            var v = await fetch("/vcs").then(function (r) { return r.json(); });
+            state.branch = { name: v.branch || "main", kind: v.default_branch || "main", lastModified: "" };
+            $("#hero-branch").textContent = v.branch || "main";
+          } catch (_) {}
+
+          await Ultron.api.fetchSessions();
+          Ultron.api.openEventStream();
+        },
+
+        async fetchSessions() {
+          try {
+            var sessions = await fetch("/session").then(function (r) { return r.json(); });
+            if (Array.isArray(sessions)) {
+              sessions.forEach(function (s) {
+                var existing = state.chats.find(function (c) { return c.id === s.id; });
+                if (!existing) {
+                  state.chats.push({
+                    id: s.id,
+                    title: s.title || "Untitled",
+                    createdAt: s.created || (s.time && s.time.created) || Date.now(),
+                    messages: [],
+                    pinned: false,
+                  });
+                }
+              });
+              Ultron.renderRecent();
+            }
+          } catch (_) {}
+        },
+
+        async ensureSession() {
+          if (state.currentChatId) return;
+          try {
+            var s = await fetch("/session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: "New Chat" }),
+            }).then(function (r) { return r.json(); });
+            state.chats.unshift({
+              id: s.id,
+              title: s.title || "Untitled",
+              createdAt: s.created || Date.now(),
+              messages: [],
+              pinned: false,
+            });
+            state.currentChatId = s.id;
+            Ultron.renderRecent();
+          } catch (err) {
+            Ultron.newChat();
+          }
+        },
+
+        openEventStream() {
+          if (state.eventSource) {
+            try { state.eventSource.close(); } catch (_) {}
+          }
+          var es = new EventSource("/event");
+          state.eventSource = es;
+
+          es.onmessage = function (e) {
+            try {
+              var event = JSON.parse(e.data);
+              var p = event.properties || event.payload || {};
+              var sid = p.sessionID;
+              if (sid && Ultron.api._handlers.has(sid)) {
+                Ultron.api._handlers.get(sid)(event);
+              }
+              if (event.type === "server.connected") {
+                state.healthy = true;
+                $(".qi[data-tool='server']").classList.add("live");
+              }
+            } catch (_) {}
+          };
+
+          es.onerror = function () {
+            if (es.readyState === EventSource.CLOSED) {
+              state.healthy = false;
+              $(".qi[data-tool='server']").classList.remove("live");
+              setTimeout(function () { Ultron.api.openEventStream(); }, 3000);
+            }
+          };
+        },
+
+        _handlers: new Map(),
+
+        subscribeEvents: function (sessionID, handler) {
+          Ultron.api._handlers.set(sessionID, handler);
+        },
+
+        unsubscribeEvents: function (sessionID) {
+          if (sessionID) {
+            Ultron.api._handlers.delete(sessionID);
+          } else {
+            Ultron.api._handlers.clear();
+          }
+        },
+      },
+
+    };
+    window.Ultron = Ultron;
+
+    /** ----------------------------------------------------------------
+     *  HANDLERS
+     *  Map of `data-action` → function. Add real logic inside each.
+     *  Every entry receives (event, element, dataset).
+     *  ---------------------------------------------------------------- */
+    const handlers = {
+      "sidebar:toggle":   ()  => Ultron.toggleSidebar(),
+      "history:back":     ()  => { /* TODO: integrate with your router */ },
+      "history:forward":  ()  => { /* TODO: integrate with your router */ },
+      "search:open":      ()  => Ultron.openCommandPalette(),
+
+      "tab:switch":       (_e, _el, ds) => Ultron.setTab(ds.tab),
+      "chat:new": async () => {
+        try {
+          var s = await fetch("/session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "New Chat" }),
+          }).then(function (r) { return r.json(); });
+          state.chats.unshift({
+            id: s.id,
+            title: s.title || "Untitled",
+            createdAt: s.created || Date.now(),
+            messages: [],
+            pinned: false,
+          });
+          state.currentChatId = s.id;
+          Ultron.renderRecent();
+          Ultron.renderMessages();
+          $("#hero").style.display = "";
+          emit("ultron:chat-updated", { chatId: s.id });
+        } catch (err) {
+          Ultron.newChat();
+        }
+      },
+      "chat:open":        (_e, _el, ds) => Ultron.openChat(ds.chatId),
+      "recent:load-more": () => {
+        state.showAllSessions = !state.showAllSessions;
+        Ultron.renderRecent();
+      },
+      "recent:collapse": () => {
+        state.showAllSessions = false;
+        Ultron.renderRecent();
+      },
+
+      // Pin / unpin a chat from the recent list.
+      "chat:pin": (e, _el, ds) => {
+        e.stopPropagation();
+        var chat = state.chats.find(function (c) { return c.id === ds.chatId; });
+        if (!chat) return;
+        chat.pinned = !chat.pinned;
+        Ultron.toast(chat.pinned ? "Pinned" : "Unpinned");
+        Ultron.renderRecent();
+      },
+
+      "chat:delete": async (e, _el, ds) => {
+        e.stopPropagation();
+        var chatId = ds.chatId;
+        if (!confirm("Delete this session permanently?")) return;
+        try {
+          var resp = await fetch("/session/" + chatId, { method: "DELETE" });
+          if (!resp.ok) throw new Error("Server returned " + resp.status);
+          // Remove from local state
+          state.chats = state.chats.filter(function (c) { return c.id !== chatId; });
+          if (state.currentChatId === chatId) {
+            state.currentChatId = state.chats.length > 0 ? state.chats[0].id : null;
+          }
+          Ultron.renderRecent();
+          Ultron.renderMessages();
+          Ultron.toast("Session deleted");
+        } catch (err) {
+          Ultron.toast("Delete failed: " + (err.message || "Unknown"));
+        }
+      },
+
+      // Toggle the pinned-only filter for the current chat.
+      "messages:filter-pinned": () => {
+        state.showPinnedOnly = !state.showPinnedOnly;
+        Ultron.renderMessages();
+      },
+
+      // Click a row in the pinned popover → jump to that message in the chat.
+      "pinned:jump": (_e, _el, ds) => {
+        // Drop the pinned-only filter so the user sees context around the target.
+        state.showPinnedOnly = false;
+        Ultron.renderMessages();
+        $("#pin-popover").hidden = true;
+        // Brief scroll-into-view + flash highlight
+        const node = document.querySelector(`.msg[data-index="${ds.msgIndex}"]`);
+        if (node) {
+          node.scrollIntoView({ block: "center", behavior: "smooth" });
+          node.style.transition = "background 600ms ease";
+          const prev = node.style.background;
+          node.style.background = "rgba(212,154,92,0.18)";
+          setTimeout(() => { node.style.background = prev; }, 900);
+        }
+      },
+
+      // Pin / unpin an individual message in the open chat.
+      "msg:pin": (e, _el, ds) => {
+        e.stopPropagation();
+        const msgs = Ultron.currentMessages();
+        const m = msgs[Number(ds.msgIndex)];
+        if (!m) return;
+        m.pinned = !m.pinned;
+        Ultron.toast(m.pinned ? "Message pinned" : "Message unpinned");
+        Ultron.renderMessages();
+      },
+
+      // Copy a message body to the clipboard.
+      "msg:copy": async (e, _el, ds) => {
+        e.stopPropagation();
+        const m = Ultron.currentMessages()[Number(ds.msgIndex)];
+        if (!m) return;
+        try {
+          await navigator.clipboard.writeText(m.content);
+          Ultron.toast("Copied");
+        } catch {
+          Ultron.toast("Copy failed");
+        }
+      },
+
+      "nav:open": (_e, _el, ds) => {
+        var target = ds.target;
+        if (target === "projects") Ultron.toast("Projects view coming soon");
+        else if (target === "artifacts") Ultron.toast("Artifacts view coming soon");
+        else if (target === "customize") Ultron.toast("Customize view coming soon");
+        else Ultron.toast("Open: " + target);
+      },
+
+      "user:menu": (e, el) => {
+        Ultron.openMenu(el, [
+          { label: "Server: " + (state.healthy ? "Connected" : "Disconnected"), value: "status" },
+          { label: "Version: " + (state.version || "unknown"), value: "version" },
+          { label: "Theme", value: "theme" },
+        ], function (item) {
+          if (item.value === "status") Ultron.toast(state.healthy ? "Server is healthy" : "Server disconnected");
+          else if (item.value === "version") Ultron.toast("Version: " + (state.version || "unknown"));
+          else Ultron.toast(item.label);
+        });
+      },
+
+      // ---- Header pill ----
+      "path:copy": async () => {
+        try {
+          await navigator.clipboard.writeText(state.cwd);
+          Ultron.toast("Path copied");
+        } catch {
+          Ultron.toast("Copy failed");
+        }
+      },
+
+      // ---- Composer dropdowns ----
+      "menu:agent": async (e, el) => {
+        Ultron.openMenu(el, [{ label: "Loading agents...", value: "", disabled: true }]);
+        try {
+          var agents = await fetch("/agent").then(function (r) { return r.json(); }).catch(function () { return []; });
+          var items = (Array.isArray(agents) ? agents : []).map(function (a) {
+            return { label: a.name || a.id || "Unknown", value: a.name || a.id, selected: state.composer.agent === (a.name || a.id) };
+          });
+          if (items.length === 0) {
+            items.push({ label: "Ultron", value: "Ultron", selected: true });
+          }
+          Ultron.openMenu(el, items, function (item) {
+            state.composer.agent = item.value;
+            $("#lbl-agent").textContent = item.value;
+            emit("ultron:composer-changed", state.composer);
+          });
+        } catch (_) {
+          Ultron.openMenu(el, [
+            { label: "Ultron", value: "Ultron", selected: state.composer.agent === "Ultron" },
+            { label: "Code", value: "Code", selected: state.composer.agent === "Code" },
+            { label: "Cowork", value: "Cowork", selected: state.composer.agent === "Cowork" },
+          ], function (item) {
+            state.composer.agent = item.value;
+            $("#lbl-agent").textContent = item.value;
+            emit("ultron:composer-changed", state.composer);
+          });
+        }
+      },
+      "menu:model": async (e, el) => {
+        Ultron.openMenu(el, [{ label: "Loading models...", value: "", disabled: true }]);
+        try {
+          var data = await fetch("/provider").then(function (r) { return r.json(); }).catch(function () { return null; });
+          var models = [];
+          var providers = data && data.all ? data.all : (Array.isArray(data) ? data : []);
+          providers.forEach(function (p) {
+            var modelMap = p.models || {};
+            var keys = Object.keys(modelMap);
+            keys.forEach(function (k) {
+              var m = modelMap[k];
+              models.push({
+                label: m.name || m.id || k,
+                value: JSON.stringify({ providerID: p.id || m.providerID, modelID: m.id || k }),
+                selected: state.composer.model === (m.name || m.id || k),
+              });
+            });
+          });
+          if (models.length === 0) {
+            models.push({ label: "Nemotron 3 Super Free", value: JSON.stringify({ providerID: "deepseek", modelID: "nemotron-3-super-free" }), selected: true });
+          }
+          Ultron.openMenu(el, models, function (item) {
+            state.composer.model = item.label;
+            try { state.composer.modelConfig = JSON.parse(item.value); } catch (_) {}
+            $("#lbl-model").textContent = item.label;
+            emit("ultron:composer-changed", state.composer);
+          });
+        } catch (_) {
+          Ultron.openMenu(el, [
+            { label: "Nemotron 3 Super Free", value: "nemotron-3-super-free", selected: true },
+          ], function (item) {
+            state.composer.model = item.label;
+            $("#lbl-model").textContent = item.label;
+            emit("ultron:composer-changed", state.composer);
+          });
+        }
+      },
+      "menu:mode": (e, el) => {
+        Ultron.openMenu(el, [
+          { label: "Low",    value: "low" },
+          { label: "Medium", value: "medium", selected: true },
+          { label: "High",   value: "high" },
+        ], (item) => {
+          state.composer.mode = item.label;
+          $("#lbl-mode").textContent = item.label;
+          emit("ultron:composer-changed", state.composer);
+        });
+      },
+
+      "composer:attach": () => {
+        var input = document.createElement("input");
+        input.type = "file";
+        input.multiple = true;
+        input.onchange = function () {
+          var files = input.files;
+          if (files && files.length > 0) {
+            Ultron.toast(files.length + " file(s) selected (upload coming soon)");
+          }
+        };
+        input.click();
+      },
+      "composer:send": async () => {
+        var ta = $("#composer-input");
+        var text = ta.value.trim();
+        if (!text) return;
+        ta.value = "";
+        ta.disabled = true;
+        Ultron.appendUserMessage(text);
+
+        if (!state.currentChatId) await Ultron.api.ensureSession();
+        var sid = state.currentChatId;
+
+        var stream = Ultron.beginAssistantMessage();
+        state.abortController = new AbortController();
+
+        try {
+          var resp = await fetch("/session/" + sid + "/prompt_async", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              parts: [{ type: "text", text: text }],
+              agent: state.composer.agent.toLowerCase(),
+            }),
+            signal: state.abortController.signal,
+          });
+          if (!resp.ok && resp.status !== 204) {
+            var errText = await resp.text().catch(function () { return "Unknown error"; });
+            stream.append("\n[Server error: " + resp.status + " " + errText.slice(0, 120) + "]");
+            stream.done();
+            return;
+          }
+          Ultron.api.subscribeEvents(sid, function (event) {
+            var p = event.properties || event.payload || {};
+            if (event.type === "message.part.delta" && p.sessionID === sid) {
+              stream.append(p.delta || "");
+            }
+            if ((event.type === "session.status" || event.type === "session.idle") && p.sessionID === sid) {
+              var status = p.status || p.state;
+              if (status === "idle" || status === "completed") {
+                stream.done();
+                Ultron.api.unsubscribeEvents(sid);
+              }
+            }
+            if (event.type === "session.error" && p.sessionID === sid) {
+              stream.append("\n[Error: " + ((p.error && p.error.message) || "Unknown") + "]");
+              stream.done();
+              Ultron.api.unsubscribeEvents(sid);
+            }
+          });
+        } catch (err) {
+          if (err.name !== "AbortError") {
+            stream.append("\n[Error: " + (err.message || String(err)) + "]");
+          }
+          stream.done();
+        } finally {
+          ta.disabled = false;
+          state.abortController = null;
+        }
+      },
+    };
+
+    /** ----------------------------------------------------------------
+     *  GLOBAL DISPATCHER
+     *  Single click listener delegates to handlers[action].
+     *  ---------------------------------------------------------------- */
+    document.addEventListener("click", (e) => {
+      const el = e.target.closest("[data-action]");
+      if (!el) {
+        // Click outside a dropdown closes it
+        if (!e.target.closest("#dropdown")) Ultron.closeMenu();
+        return;
+      }
+      const action = el.dataset.action;
+      const fn = handlers[action];
+      if (fn) fn(e, el, el.dataset);
+    });
+
+    /** ----------------------------------------------------------------
+     *  KEYBOARD SHORTCUTS
+     *  ---------------------------------------------------------------- */
+    document.addEventListener("keydown", (e) => {
+      // Ctrl/Cmd + K → command palette
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        Ultron.openCommandPalette();
+      }
+      // Esc closes overlays or aborts generation
+      if (e.key === "Escape") {
+        if (state.abortController) {
+          state.abortController.abort();
+          Ultron.api.unsubscribeEvents(state.currentChatId);
+          Ultron.toast("Aborted");
+          return;
+        }
+        Ultron.closeCommandPalette();
+        Ultron.closeMenu();
+      }
+      // Enter in composer sends (Shift+Enter = newline)
+      if (e.key === "Enter" && !e.shiftKey && document.activeElement === $("#composer-input")) {
+        e.preventDefault();
+        handlers["composer:send"](e);
+      }
+    });
+
+    /** ----------------------------------------------------------------
+     *  INITIAL RENDER
+     *  ---------------------------------------------------------------- */
+    // Initialize backend connections
+    Ultron.api.init().then(function () {
+      Ultron.setTab(state.activeTab);
+      Ultron.renderRecent();
+      Ultron.renderMessages();
+      $("#hp-path-text").innerHTML = state.cwd.replace(/(opencode)$/, '<span class="accent">$1</span>');
+    }).catch(function () {
+      Ultron.setTab(state.activeTab);
+      Ultron.renderRecent();
+      Ultron.renderMessages();
+      $("#hp-path-text").innerHTML = state.cwd.replace(/(opencode)$/, '<span class="accent">$1</span>');
+    });
+
+    // Pinned popover: open on hover
+    (function setupPinHover() {
+      var btn = $("#hp-pin");
+      var pop = $("#pin-popover");
+      var closeT = null;
+      var open = function () {
+        clearTimeout(closeT);
+        if (btn.hidden) return;
+        Ultron.renderPinnedPopover();
+        var r = btn.getBoundingClientRect();
+        pop.hidden = false;
+        pop.style.top = (r.bottom + 6) + "px";
+        pop.style.left = Math.max(8, r.right - pop.offsetWidth) + "px";
+      };
+      var scheduleClose = function () {
+        closeT = setTimeout(function () { pop.hidden = true; }, 180);
+      };
+      btn.addEventListener("mouseenter", open);
+      btn.addEventListener("mouseleave", scheduleClose);
+      pop.addEventListener("mouseenter", function () { clearTimeout(closeT); });
+      pop.addEventListener("mouseleave", scheduleClose);
+    })();
+  })();
+  </script>
+</body>
+</html>
