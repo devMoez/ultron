@@ -922,6 +922,7 @@
 </style>
 </head>
 <body>
+  <div id="__js_ok" style="position:fixed;top:4px;right:8px;width:8px;height:8px;border-radius:50%;background:#e05555;z-index:99999" title="JS not loaded"></div>
   <div class="app">
     <!-- ============ SIDEBAR ============ -->
     <aside class="sidebar">
@@ -1172,6 +1173,7 @@
   <script>
   (function () {
     "use strict";
+    var __dot = document.getElementById("__js_ok"); if (__dot) { __dot.style.background = "#7cc28a"; __dot.title = "JS loaded"; }
 
     /** ----------------------------------------------------------------
      *  STATE
@@ -1893,19 +1895,23 @@
         if (!text) return;
         ta.value = "";
         ta.disabled = true;
-        Ultron.appendUserMessage(text);
-
-        if (!state.currentChatId) await Ultron.api.ensureSession();
-        var sid = state.currentChatId;
-        // Don't send local-only IDs to the backend
-        if (sid && sid.indexOf("c_") === 0) {
-          stream.append("Server unavailable. Please check that Ultron is running.");
-          stream.done();
-          ta.disabled = false;
-          return;
+        // Ensure we have a valid backend session first
+        if (!state.currentChatId || state.currentChatId.indexOf("c_") === 0) {
+          state.currentChatId = null;
+          try {
+            await Ultron.api.ensureSession();
+          } catch (e) {
+            Ultron.toast("Server unreachable");
+            ta.disabled = false;
+            return;
+          }
         }
+        var sid = state.currentChatId;
 
+        // Now add user message to the valid session
+        Ultron.appendUserMessage(text);
         var stream = Ultron.beginAssistantMessage();
+
         state.abortController = new AbortController();
 
         try {
