@@ -1304,7 +1304,9 @@
         state.currentChatId = chatId;
         Ultron.renderRecent();
         Ultron.renderMessages();
-        emit("ultron:chat-updated", { chatId });
+        emit("ultron:chat-updated", { chatId: chatId });
+        // Fetch full session details including messages
+        Ultron.api.loadSessionMessages(chatId);
       },
       renderRecent() {
         var list = $("#recent-chats-list");
@@ -1520,6 +1522,51 @@
           } catch (_) {}
         },
 
+        async loadSessionMessages(chatId) {
+          var chat = state.chats.find(function (c) { return c.id === chatId; });
+          if (!chat) return;
+          if (chat._loaded) return;
+          try {
+            var msgs = await fetch("/session/" + chatId + "/message").then(function (r) { return r.json(); });
+            if (!Array.isArray(msgs)) return;
+            chat.messages = [];
+            msgs.forEach(function (m) {
+              var info = m.info || {};
+              var role = info.role || "unknown";
+              var reasoning = "";
+              var answer = "";
+              if (m.parts && Array.isArray(m.parts)) {
+                m.parts.forEach(function (part) {
+                  var txt = part.text || part.content || "";
+                  if (part.type === "reasoning") {
+                    reasoning += txt;
+                  } else if (part.type === "text" || !part.type) {
+                    answer += txt;
+                  }
+                });
+              }
+              var content = answer;
+              if (reasoning) {
+                content = "<details class='thinking-block'><summary>Thinking...</summary>"
+                  + reasoning.replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                  + "</details><br>" + answer;
+              }
+              chat.messages.push({
+                role: role,
+                content: content || "(empty)",
+                reasoning: reasoning,
+                answer: answer,
+                ts: (info.time && info.time.created) || Date.now(),
+                pinned: false,
+              });
+            });
+            chat._loaded = true;
+            if (state.currentChatId === chatId) {
+              Ultron.renderMessages();
+            }
+          } catch (_) {}
+        },
+
         async ensureSession() {
           if (state.currentChatId) return;
           try {
@@ -1527,7 +1574,10 @@
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ title: "New Chat" }),
-            }).then(function (r) { return r.json(); });
+            }).then(function (r) {
+              if (!r.ok) throw new Error("Server returned " + r.status);
+              return r.json();
+            });
             state.chats.unshift({
               id: s.id,
               title: s.title || "Untitled",
@@ -1538,7 +1588,9 @@
             state.currentChatId = s.id;
             Ultron.renderRecent();
           } catch (err) {
-            Ultron.newChat();
+            // Don't create local-only IDs — let composer:send show the error
+            Ultron.toast("Server unreachable. Check that Ultron is running.");
+            throw err;
           }
         },
 
@@ -1609,7 +1661,10 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ title: "New Chat" }),
-          }).then(function (r) { return r.json(); });
+          }).then(function (r) {
+            if (!r.ok) throw new Error("Server returned " + r.status);
+            return r.json();
+          });
           state.chats.unshift({
             id: s.id,
             title: s.title || "Untitled",
@@ -1623,7 +1678,7 @@
           $("#hero").style.display = "";
           emit("ultron:chat-updated", { chatId: s.id });
         } catch (err) {
-          Ultron.newChat();
+          Ultron.toast("Server unreachable");
         }
       },
       "chat:open":        (_e, _el, ds) => Ultron.openChat(ds.chatId),
@@ -1842,6 +1897,13 @@
 
         if (!state.currentChatId) await Ultron.api.ensureSession();
         var sid = state.currentChatId;
+        // Don't send local-only IDs to the backend
+        if (sid && sid.indexOf("c_") === 0) {
+          stream.append("Server unavailable. Please check that Ultron is running.");
+          stream.done();
+          ta.disabled = false;
+          return;
+        }
 
         var stream = Ultron.beginAssistantMessage();
         state.abortController = new AbortController();
@@ -1873,10 +1935,8 @@
               }
               if (p.partID !== currentPartID) {
                 // New part started - wrap previous as thinking
-                if (thinkingText.length > 0) {
-                  hasThinking = true;
-                }
                 thinkingText = stream.getContent();
+                if (thinkingText.length > 0) hasThinking = true;
                 stream.clear();
                 currentPartID = p.partID;
               }
