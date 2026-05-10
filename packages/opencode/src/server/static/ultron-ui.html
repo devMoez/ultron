@@ -355,7 +355,6 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    overflow: hidden;
   }
 
   /* Subtle centered header bar */
@@ -630,12 +629,7 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    scroll-behavior: smooth;
   }
-  .messages::-webkit-scrollbar { width: 5px; }
-  .messages::-webkit-scrollbar-track { background: transparent; }
-  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-  .messages::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
   .messages:empty { display: none; }
     .thinking-block { margin: 4px 0 8px; font-size: 11px; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 10px; }
   .thinking-block summary { cursor: pointer; color: var(--text-faint); margin-bottom: 2px; user-select: none; outline: none; }
@@ -1433,9 +1427,6 @@
         Ultron.renderPinnedPopover();
 
         wrap.scrollTop = wrap.scrollHeight;
-        // Smooth scroll into view for the last message
-        var last = wrap.lastElementChild;
-        if (last) last.scrollIntoView({ block: "end", behavior: "smooth" });
       },
 
       // Render pinned messages into the hover popover. Each row jumps to the
