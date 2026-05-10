@@ -9,7 +9,7 @@
       "apiKey": "gsk-..."
     }
   },
-  "instructions": [".opencode/ULTRON_MEMORY.md", ".claude/rules.md"],
+  "instructions": [".opencode/ULTRON_MEMORY.md", ".opencode/rules.md"],
   "skills": {
     "paths": ["C:/Users/moezf/Desktop/Claude-Skills"]
   },

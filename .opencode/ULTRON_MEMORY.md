@@ -54,14 +54,14 @@ Do NOT load or mention memory files manually. Let the MCP handle it.
 - Moez prefers caveman mode always
 - Swarm UI runs at http://localhost:8000 (start via `swarm` from any terminal — uses `swarm.ps1`)
 
-## 📋 CONSTRUCTIVE RULES (see .claude/rules.md)
-Rules file `.claude/rules.md` is loaded as instructions. Key points:
-- No stub/TODO code. No hardcoded mocks. Write real production code.
-- Full dependency propagation: change a file → update all its dependents.
+## 📋 CONSTRUCTIVE RULES (see .opencode/rules.md)
+Rules file `.opencode/rules.md` is loaded as instructions — hardcoded into Ultron, not dependent on Claude config. Key points:
+- Never write stub/TODO code. No hardcoded mocks. Real production code only.
+- Full dependency propagation: change a file → update all its dependents in same session.
 - Backend changes require UI updates in same session.
 - Cortex preflight before touching files, verify after.
 - Performance: keep context tight, read only what you need.
-- When in doubt between instructions files: this file (ULTRON_MEMORY.md) takes precedence.
+- When in doubt between instruction files: this file (ULTRON_MEMORY.md) takes precedence over rules.md.
 
 ## 🧠 CORTEX CROSS-REPO NOTES
 - Cortex repo: `devMoez/Cortex` (separate from ultron, equally important)
