@@ -25,13 +25,14 @@ Write-Host "        Cortex live on http://localhost:8080" -ForegroundColor DarkM
 
 # 1. True Swarm (blackboard engine on port 8000)
 Write-Host "  [1] Starting True Swarm..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$Root\swarm\true_swarm\start.ps1`"" -WindowStyle Minimized
+$SwarmVenv = Join-Path $Root "swarm\venv\Scripts\python.exe"
+$SwarmPy   = if (Test-Path $SwarmVenv) { $SwarmVenv } else { "python" }
+Start-Process -FilePath $SwarmPy `
+    -ArgumentList "-m uvicorn orchestrator:app --host 0.0.0.0 --port 8000" `
+    -WorkingDirectory (Join-Path $Root "swarm") `
+    -WindowStyle Minimized
 
 Start-Sleep -Seconds 2
-
-# 1b. Pipeline Swarm (legacy orchestrator on port 5000)
-Write-Host "  [1b] Starting Pipeline Swarm..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$Root\swarm\start.ps1`"" -WindowStyle Minimized
 
 Start-Sleep -Seconds 2
 

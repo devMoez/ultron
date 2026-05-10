@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Set
 
@@ -20,6 +21,8 @@ import httpx
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 # Make swarm root importable
 SWARM_ROOT = Path(__file__).resolve().parent
@@ -91,8 +94,77 @@ AGENT_SCRIPTS = {
     for name in AGENT_PORTS
 }
 
-# ── FastAPI app ───────────────────────────────────────────────────────────────
-app = FastAPI(title="Ultron Swarm Orchestrator")
+# ── FastAPI app with lifespan (handles startup even when run via uvicorn orchestrator:app) ──
+
+_startup_done = False
+_startup_lock = threading.Lock()
+
+def _startup() -> None:
+    """Initialize DB, spawn agents, start background threads (idempotent)."""
+    global _startup_done
+    with _startup_lock:
+        if _startup_done:
+            log.info("Startup already done, skipping")
+            return
+        _startup_done = True
+
+    log.info("Initializing database...")
+    init_db()
+
+    log.info("Starting all agents...")
+    _start_all_agents()
+    time.sleep(2)
+
+    # Pre-register known agents
+    if shared_registry and _CORE_LOADED:
+        for aname, aport in AGENT_PORTS.items():
+            shared_registry.register(aname, _AGENT_SKILLS.get(aname, []), aport)
+        log.info("Agent registry populated")
+
+    # Start SkillOrchestra
+    if _CORE_LOADED and SkillOrchestra:
+        def _spawn_skill(skill: str):
+            import uuid as _uuid
+            name = f"{skill}_agent_{_uuid.uuid4().hex[:4]}"
+            shared_registry.register(name, [skill], port=0, spawned=True)
+            log.info(f"SkillOrchestra spawned virtual agent {name!r} for skill {skill!r}")
+
+        orchestra = SkillOrchestra(
+            dag=shared_dag,
+            registry=shared_registry,
+            bus=shared_bus,
+            spawn_skill_fn=_spawn_skill,
+            poll_interval=2.0,
+        )
+        orchestra.start()
+        log.info("SkillOrchestra started")
+
+    log.info("Starting health monitor...")
+    threading.Thread(target=_health_monitor, daemon=True, name="health").start()
+
+    log.info("Starting task queue watcher...")
+    threading.Thread(target=_queue_watcher, daemon=True, name="queue").start()
+
+    log.info("Swarm orchestrator fully initialized")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """FastAPI lifespan: runs startup on ASGI serve, cleans up on shutdown."""
+    log.info("Lifespan startup — running initialization...")
+    _startup()
+    log.info(f"Orchestrator ready on port {ORCHESTRATOR_PORT}")
+    yield
+    log.info("Lifespan shutdown — cleaning up...")
+    # Optionally stop agent processes
+    with _lock:
+        for name, proc in agent_processes.items():
+            if proc.poll() is None:
+                proc.terminate()
+                log.info(f"Agent {name} terminated")
+
+
+app = FastAPI(title="Ultron Swarm Orchestrator", lifespan=_lifespan)
 
 # Allow the Ultron web UI (any localhost port) to poll the orchestrator
 app.add_middleware(
@@ -101,6 +173,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Serve Swarm UI (single-page app from swarm/ui/) ───────────────────────
+_UI_DIR = SWARM_ROOT / "ui"
+if _UI_DIR.exists():
+    # Mount static assets (css, js, etc.) under /static/
+    app.mount("/static", StaticFiles(directory=str(_UI_DIR)), name="ui-static")
+
+    @app.get("/")
+    def serve_ui():
+        return FileResponse(_UI_DIR / "index.html")
+
+    log.info(f"Serving UI from {_UI_DIR} at /")
+else:
+    log.warning(f"No UI directory found at {_UI_DIR}")
 
 # ── WebSocket connection manager ──────────────────────────────────────────────
 class _WSManager:
@@ -725,43 +811,6 @@ def _queue_watcher() -> None:
 # ── Entrypoint ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    log.info("Initializing database...")
-    init_db()
-
-    log.info("Starting all agents...")
-    _start_all_agents()
-    time.sleep(2)  # give agents a moment to boot
-
-    # Pre-register known agents in the registry so they show up immediately
-    if shared_registry and _CORE_LOADED:
-        for aname, aport in AGENT_PORTS.items():
-            shared_registry.register(aname, _AGENT_SKILLS.get(aname, []), aport)
-        log.info("Agent registry populated")
-
-    # Start SkillOrchestra (skill-based DAG routing, parallel dispatch)
-    if _CORE_LOADED and SkillOrchestra:
-        def _spawn_skill(skill: str):
-            """Called by SkillOrchestra when a skill is missing."""
-            import uuid as _uuid
-            name = f"{skill}_agent_{_uuid.uuid4().hex[:4]}"
-            shared_registry.register(name, [skill], port=0, spawned=True)
-            log.info(f"SkillOrchestra spawned virtual agent {name!r} for skill {skill!r}")
-
-        orchestra = SkillOrchestra(
-            dag=shared_dag,
-            registry=shared_registry,
-            bus=shared_bus,
-            spawn_skill_fn=_spawn_skill,
-            poll_interval=2.0,
-        )
-        orchestra.start()
-        log.info("SkillOrchestra started")
-
-    log.info("Starting health monitor...")
-    threading.Thread(target=_health_monitor, daemon=True, name="health").start()
-
-    log.info("Starting task queue watcher...")
-    threading.Thread(target=_queue_watcher, daemon=True, name="queue").start()
-
+    _startup()
     log.info(f"Orchestrator listening on port {ORCHESTRATOR_PORT}")
     uvicorn.run(app, host="127.0.0.1", port=ORCHESTRATOR_PORT, log_level="warning")

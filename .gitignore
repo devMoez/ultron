@@ -61,3 +61,11 @@ __pycache__/
 .mypy_cache/
 venv/
 .venv/
+
+# Claude worktrees.claude/worktrees/
+.claude/settings.local.json
+
+# Swarm logs
+swarm/*.log
+swarm/*.log.err
+swarm/*.err

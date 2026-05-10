@@ -1,11 +1,12 @@
 ﻿{
   "$schema": "https://opencode.ai/config.json",
-  // Change this to a model you have an API key for
-  // Options: "openrouter/meta-llama/llama-3.3-70b-instruct", "deepseek/deepseek-chat", "anthropic/claude-3.5-sonnet"
-  "model": "openrouter/meta-llama/llama-3.3-70b-instruct",
+  "model": "openrouter/meta-llama/llama-3.3-70b-instruct:free",
   "provider": {
     "openrouter": {
-      "apiKey": "your-openrouter-key-here"
+      "apiKey": "sk-or-v1-..."
+    },
+    "groq": {
+      "apiKey": "gsk-..."
     }
   },
   "instructions": [".opencode/ULTRON_MEMORY.md"],
@@ -29,6 +30,22 @@
     "tasksync": {
       "type": "local",
       "command": ["python3", "C:/Users/moezf/Desktop/opencode/.opencode/mcp/tasksync.py"]
+    },
+    "cortex": {
+      "type": "local",
+      "command": ["python", "C:/Users/moezf/Desktop/Cortex/mcp_server.py"]
+    },
+    "swarm": {
+      "type": "local",
+      "command": ["C:/Users/moezf/Desktop/opencode/swarm/venv/Scripts/python.exe", "-m", "uvicorn", "orchestrator:app", "--port", "8000"]
+    },
+    "true-swarm": {
+      "type": "local",
+      "command": ["C:/Users/moezf/Desktop/opencode/swarm/venv/Scripts/python.exe", "-m", "uvicorn", "orchestrator:app", "--port", "8000"]
+    },
+    "memory": {
+      "type": "local",
+      "command": ["python3", "C:/Users/moezf/Desktop/opencode/memory/memory_mcp.py"]
     }
   },
   "tools": {

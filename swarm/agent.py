@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import logging
 
-from .db import get_connection
-from .blackboard import Blackboard
-from .skill_library import SkillLibrary
+from db import get_connection
+from blackboard import Blackboard
+from skill_library import SkillLibrary
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(name)s %(levelname)s: %(message)s')

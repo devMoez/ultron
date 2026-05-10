@@ -2,7 +2,7 @@
 # Runs the FastAPI orchestrator on port 8000
 
 $Root    = Split-Path -Parent $MyInvocation.MyCommand.Path
-$SwarmRoot = Split-Path -Parent $Root
+$SwarmRoot = $Root  # script lives inside swarm/
 $Venv    = Join-Path $SwarmRoot "venv\Scripts\python.exe"
 $Python  = if (Test-Path $Venv) { $Venv } else { "python" }
 
@@ -21,4 +21,4 @@ try {
 
 # Run from swarm root so relative imports work
 Set-Location $SwarmRoot
-& $Python -m uvicorn true_swarm.orchestrator:app --host 0.0.0.0 --port 8000 --reload
+&amp; $Python -m uvicorn orchestrator:app --host 0.0.0.0 --port 8000 --reload
