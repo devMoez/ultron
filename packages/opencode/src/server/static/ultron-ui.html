@@ -631,6 +631,10 @@
     gap: 14px;
   }
   .messages:empty { display: none; }
+    .thinking-block { margin: 4px 0 8px; font-size: 11px; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 10px; }
+  .thinking-block summary { cursor: pointer; color: var(--text-faint); margin-bottom: 2px; user-select: none; outline: none; }
+  .thinking-block[open] summary { color: var(--text-secondary); }
+
   .msg {
     position: relative;
     max-width: 720px;
@@ -1366,7 +1370,7 @@
           // Body
           const body = document.createElement("span");
           body.className = "msg-body";
-          body.textContent = m.content;
+          body.innerHTML = m.content.replace(/\n/g, "<br>");
           div.appendChild(body);
           // Actions
           const acts = document.createElement("div");
@@ -1438,15 +1442,32 @@
         Ultron.renderRecent();
       },
       beginAssistantMessage() {
-        const chat = state.chats.find(c => c.id === state.currentChatId);
-        const msg = { role: "assistant", content: "", ts: Date.now() };
+        var chat = state.chats.find(function (c) { return c.id === state.currentChatId; });
+        var msg = { role: "assistant", content: "", ts: Date.now() };
         chat.messages.push(msg);
         Ultron.renderMessages();
-        const node = $("#messages").lastElementChild;
+        var node = $("#messages").lastElementChild;
         node.classList.add("streaming");
         return {
-          append: (chunk) => { msg.content += chunk; node.textContent = msg.content; },
-          done:   ()      => { node.classList.remove("streaming"); }
+          append: function (chunk) {
+            msg.content += chunk;
+            var body = node.querySelector(".msg-body");
+            if (body) body.textContent = msg.content;
+          },
+          getContent: function () { return msg.content; },
+          clear: function () { msg.content = ""; },
+          wrapThinking: function (thinking) {
+            msg.content = "<details class='thinking-block'><summary>Thinking...</summary>"
+              + thinking.replace(/</g, "&lt;").replace(/>/g, "&gt;")
+              + "</details>\n\n" + msg.content;
+            var body = node.querySelector(".msg-body");
+            if (body) body.innerHTML = msg.content.replace(/\n/g, "<br>");
+          },
+          done: function () {
+            node.classList.remove("streaming");
+            var body = node.querySelector(".msg-body");
+            if (body) body.innerHTML = msg.content.replace(/\n/g, "<br>");
+          }
         };
       },
       // ---- Backend API integration ----
@@ -1841,17 +1862,45 @@
             stream.done();
             return;
           }
+          var currentPartID = null;
+          var thinkingText = "";
+          var hasThinking = false;
           Ultron.api.subscribeEvents(sid, function (event) {
             var p = event.properties || event.payload || {};
             if (event.type === "message.part.delta" && p.sessionID === sid) {
+              if (currentPartID === null) {
+                currentPartID = p.partID;
+              }
+              if (p.partID !== currentPartID) {
+                // New part started - wrap previous as thinking
+                if (thinkingText.length > 0) {
+                  hasThinking = true;
+                }
+                thinkingText = stream.getContent();
+                stream.clear();
+                currentPartID = p.partID;
+              }
               stream.append(p.delta || "");
             }
-            if ((event.type === "session.status" || event.type === "session.idle") && p.sessionID === sid) {
+            if (event.type === "session.status" && p.sessionID === sid) {
               var status = p.status || p.state;
+              if (status === "busy") {
+                currentPartID = null;
+              }
               if (status === "idle" || status === "completed") {
+                if (hasThinking && thinkingText.length > 0) {
+                  stream.wrapThinking(thinkingText);
+                }
                 stream.done();
                 Ultron.api.unsubscribeEvents(sid);
               }
+            }
+            if (event.type === "session.idle" && p.sessionID === sid) {
+              if (hasThinking && thinkingText.length > 0) {
+                stream.wrapThinking(thinkingText);
+              }
+              stream.done();
+              Ultron.api.unsubscribeEvents(sid);
             }
             if (event.type === "session.error" && p.sessionID === sid) {
               stream.append("\n[Error: " + ((p.error && p.error.message) || "Unknown") + "]");
