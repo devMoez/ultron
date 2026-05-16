@@ -947,7 +947,13 @@
   .think-details { margin-bottom: 4px; }
   .think-details summary { cursor: pointer; color: var(--text-faint); font-size: 11px; outline: none; }
   .think-details[open] summary { color: var(--text-secondary); }
-  .think-body { margin-top: 4px; font-size: 12px; color: var(--text-muted); white-space: pre-wrap; padding: 6px 0 0 8px; border-left: 2px solid var(--border); }</style>
+  .think-body { margin-top: 4px; font-size: 12px; color: var(--text-muted); white-space: pre-wrap; padding: 6px 0 0 8px; border-left: 2px solid var(--border); }
+  .messages::-webkit-scrollbar { width: 6px; }
+  .messages::-webkit-scrollbar-track { background: transparent; }
+  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .messages::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+  #recent-chats-list::-webkit-scrollbar { width: 4px; }
+  #recent-chats-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }</style>
 </head>
 <body>
   <div id="__js_ok" style="position:fixed;top:4px;right:8px;width:8px;height:8px;border-radius:50%;background:#e05555;z-index:99999" title="JS not loaded"></div>
@@ -1023,7 +1029,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
           Projects
         </div>
-        <div id="nav-artifacts" class="nav-item" data-action="nav:open" data-target="artifacts">
+        <div id="nav-artifacts" class="nav-item" data-action="nav:open" data-target="artifacts" style="display:none">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 3 14.5 9 21 9.5 16 14 17.5 21 12 17.5 6.5 21 8 14 3 9.5 9.5 9 12 3"/></svg>
           Artifacts
         </div>
@@ -1225,6 +1231,7 @@
       abortController: null,
       eventSource: null,
       showAllSessions: false,
+      _tabSessions: {},
     };
 
     /** ----------------------------------------------------------------
@@ -1302,12 +1309,38 @@
 
       // ---- Tabs ----
       setTab(tab) {
+        if (state.currentChatId) state._tabSessions[state.activeTab] = state.currentChatId;
         state.activeTab = tab;
-        $$(".tabs .tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tab));
-        // TODO: swap main view content based on tab.
-        // The hero is only meaningful on 'chat' with no messages.
+        $$(".tabs .tab").forEach(function (t) { t.classList.toggle("active", t.dataset.tab === tab); });
+        if (tab === "swarm") {
+          var main = document.querySelector(".main");
+          var existing = document.getElementById("swarm-frame");
+          if (!existing) {
+            $("#hero").style.display = "none";
+            $("#messages").style.display = "none";
+            var cw = document.querySelector(".composer-wrap"); if (cw) cw.style.display = "none";
+            var frame = document.createElement("iframe");
+            frame.id = "swarm-frame";
+            frame.src = "http://localhost:8000/";
+            frame.style.cssText = "flex:1;border:none;width:100%;height:100%;";
+            main.appendChild(frame);
+          } else { existing.style.display = ""; }
+          emit("ultron:tab-changed", { tab: tab });
+          return;
+        }
+        var sf = document.getElementById("swarm-frame"); if (sf) sf.style.display = "none";
+        $("#hero").style.display = "";
+        $("#messages").style.display = "";
+        var cw = document.querySelector(".composer-wrap"); if (cw) cw.style.display = "";
+        state.currentChatId = state._tabSessions[tab] || null;
+        if (!state.currentChatId) {
+          var tabChats = state.chats.filter(function (c) { return c.tab === tab; });
+          if (tabChats.length > 0) state.currentChatId = tabChats[0].id;
+        }
         $("#hero").style.display = (tab === "chat" && Ultron.currentMessages().length === 0) ? "" : "none";
-        emit("ultron:tab-changed", { tab });
+        Ultron.renderRecent();
+        Ultron.renderMessages();
+        emit("ultron:tab-changed", { tab: tab });
       },
 
       // ---- Sidebar ----
@@ -1344,7 +1377,8 @@
         $$(".recent-item", list).forEach(function (n) { n.remove(); });
         var loadMore = $("#btn-load-more");
         // Pinned first, then by createdAt desc.
-        var sorted = state.chats.slice().sort(function (a, b) {
+        var filtered = state.chats.filter(function (c) { return !c.tab || c.tab === state.activeTab; });
+        var sorted = filtered.slice().sort(function (a, b) {
           if (!!b.pinned - !!a.pinned) return !!b.pinned - !!a.pinned;
           return b.createdAt - a.createdAt;
         });
@@ -1569,7 +1603,8 @@
                 if (!existing) {
                   state.chats.push({
                     id: s.id,
-                    title: s.title || "Untitled",
+                    title: (s.title || "Untitled").replace(/^\[(\w+)\]\s*/, ""),
+                    tab: (function(t){ var m = (t||"").match(/^\[(\w+)\]/); return m ? m[1] : "chat"; })(s.title),
                     createdAt: s.created || (s.time && s.time.created) || Date.now(),
                     messages: [],
                     pinned: false,
@@ -1639,7 +1674,8 @@
             });
             state.chats.unshift({
               id: s.id,
-              title: s.title || "Untitled",
+              title: (s.title || "Untitled").replace(/^\[(\w+)\]\s*/, ""),
+                    tab: (function(t){ var m = (t||"").match(/^\[(\w+)\]/); return m ? m[1] : "chat"; })(s.title),
               createdAt: s.created || Date.now(),
               messages: [],
               pinned: false,
@@ -1726,12 +1762,14 @@
           });
           state.chats.unshift({
             id: s.id,
-            title: s.title || "Untitled",
+            title: (s.title || "Untitled").replace(/^\[(\w+)\]\s*/, ""),
+                    tab: (function(t){ var m = (t||"").match(/^\[(\w+)\]/); return m ? m[1] : "chat"; })(s.title),
             createdAt: s.created || Date.now(),
             messages: [],
             pinned: false,
           });
           state.currentChatId = s.id;
+          fetch("/session/" + s.id, { method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify({title: "[" + state.activeTab + "] New"}) }).catch(function(){});
           Ultron.renderRecent();
           Ultron.renderMessages();
           $("#hero").style.display = "";
